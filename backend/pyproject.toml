@@ -1,0 +1,28 @@
+[project]
+name = "finsight-backend"
+version = "0.1.0"
+description = "FinSight backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "pydantic>=2",
+    "pydantic-settings",
+    "cryptography",
+    "argon2-cffi",
+    "pyjwt",
+    "pymupdf",
+]
+
+[dependency-groups]
+dev = ["pytest", "hypothesis", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
