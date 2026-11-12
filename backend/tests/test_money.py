@@ -76,3 +76,23 @@ def test_round_half_up_to_bucket_rejects_non_positive_bucket():
 @given(st.integers(min_value=-(10**12), max_value=10**12))
 def test_format_then_parse_round_trips(minor):
     assert to_minor(format_minor(minor)) == minor
+
+
+@pytest.mark.parametrize("bad", ["1e2", "1_0", "", "  ", "NaN", "Infinity", "1.", ".5", "--1", "1,000"])
+def test_to_minor_rejects_malformed_strings(bad):
+    with pytest.raises(ValueError):
+        to_minor(bad)
+
+
+def test_to_minor_strips_surrounding_whitespace():
+    assert to_minor(" 12.5 ") == 1250
+
+
+@pytest.mark.parametrize("big", ["92233720368547758.08", 2**63, -(2**63), Decimal("1" + "0" * 30)])
+def test_to_minor_rejects_overflow(big):
+    with pytest.raises(ValueError):
+        to_minor(big)
+
+
+def test_to_minor_accepts_largest_representable_amount():
+    assert to_minor("92233720368547758.07") == 2**63 - 1

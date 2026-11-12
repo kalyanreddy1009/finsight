@@ -151,7 +151,7 @@ CREATE TABLE journal_lines (
     id TEXT PRIMARY KEY,
     journal_entry_id TEXT NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
     account_id TEXT NOT NULL REFERENCES accounts(id),
-    signed_amount_minor INTEGER NOT NULL CHECK (signed_amount_minor != 0), -- Positive = DEBIT, Negative = CREDIT
+    signed_amount_minor INTEGER NOT NULL CHECK (typeof(signed_amount_minor) = 'integer' AND signed_amount_minor != 0), -- Positive = DEBIT, Negative = CREDIT
     currency TEXT NOT NULL DEFAULT 'INR',
     memo TEXT
 );
@@ -344,8 +344,19 @@ BEGIN
     SELECT CASE
         WHEN (SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = OLD.id) < 2
         THEN RAISE(ABORT, 'LEDGER_INTEGRITY_ERROR: A journal entry needs at least two lines to post.')
+        WHEN (SELECT COUNT(DISTINCT currency) FROM journal_lines WHERE journal_entry_id = OLD.id) > 1
+        THEN RAISE(ABORT, 'LEDGER_INTEGRITY_ERROR: A journal entry must use a single currency.')
         WHEN (SELECT SUM(signed_amount_minor) FROM journal_lines WHERE journal_entry_id = OLD.id) != 0
         THEN RAISE(ABORT, 'LEDGER_INTEGRITY_ERROR: Journal lines do not sum to zero.')
+        WHEN NEW.id IS NOT OLD.id
+          OR NEW.entry_date IS NOT OLD.entry_date
+          OR NEW.entry_type IS NOT OLD.entry_type
+          OR NEW.source_statement_id IS NOT OLD.source_statement_id
+          OR NEW.reverses_journal_entry_id IS NOT OLD.reverses_journal_entry_id
+          OR NEW.is_provisional IS NOT OLD.is_provisional
+          OR NEW.idempotency_key IS NOT OLD.idempotency_key
+          OR NEW.created_at IS NOT OLD.created_at
+        THEN RAISE(ABORT, 'LEDGER_INTEGRITY_ERROR: Posting must not change any other column.')
     END;
 END;
 
@@ -354,6 +365,28 @@ BEFORE UPDATE OF status ON journal_entries
 WHEN OLD.status = 'POSTED' AND NEW.status != 'POSTED'
 BEGIN
     SELECT RAISE(ABORT, 'IMMUTABILITY_ERROR: A posted journal entry cannot return to DRAFT; insert a REVERSAL entry instead.');
+END;
+
+-- A POSTED entry is frozen. The only permitted change is upgrading a provisional entry in place
+-- (is_provisional 1 -> 0), optionally setting source_statement_id in the same UPDATE.
+CREATE TRIGGER trg_journal_entry_posted_is_frozen
+BEFORE UPDATE ON journal_entries
+WHEN OLD.status = 'POSTED'
+BEGIN
+    SELECT CASE
+        WHEN NEW.id IS NOT OLD.id
+          OR NEW.entry_date IS NOT OLD.entry_date
+          OR NEW.entry_type IS NOT OLD.entry_type
+          OR NEW.reverses_journal_entry_id IS NOT OLD.reverses_journal_entry_id
+          OR NEW.idempotency_key IS NOT OLD.idempotency_key
+          OR NEW.created_at IS NOT OLD.created_at
+        THEN RAISE(ABORT, 'IMMUTABILITY_ERROR: Fields of a posted journal entry cannot be changed.')
+        WHEN NEW.is_provisional IS NOT OLD.is_provisional
+          AND NOT (OLD.is_provisional = 1 AND NEW.is_provisional = 0)
+        THEN RAISE(ABORT, 'IMMUTABILITY_ERROR: A posted entry can only change from provisional to committed.')
+        WHEN NEW.source_statement_id IS NOT OLD.source_statement_id AND OLD.is_provisional = 0
+        THEN RAISE(ABORT, 'IMMUTABILITY_ERROR: source_statement_id of a committed entry cannot be changed.')
+    END;
 END;
 
 CREATE TRIGGER trg_journal_lines_no_insert_when_posted

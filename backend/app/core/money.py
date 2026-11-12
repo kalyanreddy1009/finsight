@@ -1,5 +1,6 @@
 """Integer-only money helpers. Amounts are paise (minor units); floats are rejected."""
 
+import re
 from decimal import Decimal, InvalidOperation
 
 _MINOR_PER_MAJOR = 100
@@ -10,11 +11,24 @@ def _reject_float(value: object) -> None:
         raise TypeError("Floats are not allowed for monetary values")
 
 
+_MAX_MINOR = 2**63 - 1
+_AMOUNT_RE = re.compile(r"-?\d+(\.\d{1,2})?")
+
+
 def to_minor(amount: str | Decimal | int) -> int:
-    """Convert rupees to paise. Raises ValueError for more than 2 decimal places."""
+    """Convert rupees to paise.
+
+    Strings must look like "-?digits[.1-2 digits]" (surrounding whitespace is stripped). Raises
+    ValueError for malformed input, more than 2 decimal places, or a result outside +-(2**63 - 1).
+    """
     _reject_float(amount)
     if isinstance(amount, bool) or not isinstance(amount, str | Decimal | int):
         raise TypeError("amount must be str, Decimal or int")
+    if isinstance(amount, str):
+        text = amount.strip()
+        if not _AMOUNT_RE.fullmatch(text):
+            raise ValueError(f"Invalid monetary amount: {amount!r}")
+        amount = text
     try:
         value = Decimal(amount)
     except InvalidOperation as exc:
@@ -24,7 +38,10 @@ def to_minor(amount: str | Decimal | int) -> int:
     minor = value * _MINOR_PER_MAJOR
     if minor != minor.to_integral_value():
         raise ValueError("Amount has more than 2 decimal places")
-    return int(minor)
+    result = int(minor)
+    if abs(result) > _MAX_MINOR:
+        raise ValueError("Amount is outside the 64-bit range")
+    return result
 
 
 def format_minor(amount_minor: int) -> str:
