@@ -54,8 +54,12 @@ def connect(db_path: str | Path, key: str | None = None) -> sqlite3.Connection:
 def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """BEGIN IMMEDIATE ... COMMIT, rolling back on any exception.
 
-    Nesting is not supported: calling this while a transaction is open raises sqlite3.OperationalError.
+    If a transaction is already open on this connection, the block joins it: nothing is committed
+    or rolled back here, and an exception propagates so the outermost block rolls everything back.
     """
+    if conn.in_transaction:
+        yield conn
+        return
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield conn

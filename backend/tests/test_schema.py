@@ -360,12 +360,25 @@ def test_migration_filenames_must_match_strict_pattern(tmp_path):
 # --- transaction() ----------------------------------------------------------------------------
 
 
-def test_nested_transaction_raises_and_leaves_outer_transaction_intact(conn):
+_INSERT_BUDGET = "INSERT INTO budgets (id, name, period_month, total_limit_minor) VALUES ('b1', 'B', '2026-01', 1)"
+
+
+def test_nested_transaction_joins_outer_and_commits_once(conn):
     with transaction(conn):
-        with pytest.raises(sqlite3.OperationalError), transaction(conn):
-            pass
+        with transaction(conn):
+            conn.execute(_INSERT_BUDGET)
         assert conn.in_transaction
     assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM budgets").fetchone()[0] == 1
+
+
+def test_failure_in_nested_transaction_rolls_back_the_outer_work(conn):
+    with pytest.raises(RuntimeError), transaction(conn):
+        conn.execute(_INSERT_BUDGET)
+        with transaction(conn):
+            raise RuntimeError("boom")
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM budgets").fetchone()[0] == 0
 
 
 def test_transaction_leaves_no_open_transaction_after_failure(conn):
