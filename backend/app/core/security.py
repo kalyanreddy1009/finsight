@@ -5,10 +5,11 @@ import hmac
 import secrets
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import anyio.to_thread
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -19,6 +20,9 @@ MIN_PASSWORD_LENGTH = 12
 MIN_SECRET_BYTES = 32
 MAX_FAILED_LOGINS = 5
 THROTTLE_WINDOW_SECONDS = 15 * 60
+GLOBAL_FAILED_LOGIN_CEILING = 50
+REFRESH_REUSE_GRACE_SECONDS = 30
+ABSOLUTE_SESSION_LIFETIME_SECONDS = 90 * 24 * 3600
 _ALGORITHM = "HS256"
 
 _hasher = PasswordHasher()
@@ -86,27 +90,51 @@ def tokens_match(presented: str, stored_hash: str) -> bool:
 
 @dataclass
 class LoginThrottle:
-    """In-memory failed-login limiter: 5 failures inside a sliding 15 minute window lock logins."""
+    """In-memory failed-login limiter, sliding window.
+
+    Each client address may fail ``max_failures`` times per window; independently, all addresses
+    together may fail ``global_ceiling`` times per window, after which everyone is refused.
+    """
 
     clock: Callable[[], float] = time.time
     max_failures: int = MAX_FAILED_LOGINS
+    global_ceiling: int = GLOBAL_FAILED_LOGIN_CEILING
     window_seconds: int = THROTTLE_WINDOW_SECONDS
 
     def __post_init__(self) -> None:
-        self._failures: dict[str, deque[float]] = defaultdict(deque)
+        self._failures: dict[str, deque[float]] = {}
+        self._global: deque[float] = deque()
 
-    def _prune(self, key: str) -> deque[float]:
-        failures = self._failures[key]
+    def _prune(self, failures: deque[float]) -> deque[float]:
         cutoff = self.clock() - self.window_seconds
         while failures and failures[0] <= cutoff:
             failures.popleft()
         return failures
 
     def is_locked(self, key: str) -> bool:
-        return len(self._prune(key)) >= self.max_failures
+        if len(self._prune(self._global)) >= self.global_ceiling:
+            return True
+        failures = self._failures.get(key)
+        if failures is None:
+            return False
+        if not self._prune(failures):
+            del self._failures[key]
+            return False
+        return len(failures) >= self.max_failures
 
     def record_failure(self, key: str) -> None:
-        self._prune(key).append(self.clock())
+        now = self.clock()
+        self._prune(self._failures.setdefault(key, deque())).append(now)
+        self._prune(self._global).append(now)
 
     def reset(self, key: str) -> None:
+        """A successful login clears that address's failures (the global count is untouched)."""
         self._failures.pop(key, None)
+
+
+async def hash_password_async(password: str) -> str:
+    return await anyio.to_thread.run_sync(hash_password, password)
+
+
+async def verify_password_async(password: str, password_hash: str | None) -> bool:
+    return await anyio.to_thread.run_sync(verify_password, password, password_hash)

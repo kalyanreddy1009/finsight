@@ -213,3 +213,71 @@ def test_second_statement_does_not_repost_opening_balance(conn, account, store):
     ledger = LedgerService(conn)
     assert ledger.account_balance(account) == parsed.closing_balance_minor
     assert ledger.verify_integrity().is_clean
+
+
+def _two_overlapping(conn, account, store):
+    rows = [
+        (D, upi("111111111111", "SWIGGY", "swiggy@ybl"), 25_000, 0),
+        (D, upi("222222222222", "SHOP", "shop@ybl"), 5_000, 0),
+    ]
+    first, parsed = staged(conn, account, store, rows)
+    second, _ = staged(conn, account, store, rows)
+    for sid in (first.statement_id, second.statement_id):
+        approve_pending(conn, sid)
+    return first, second, parsed
+
+
+def test_overlapping_statements_do_not_double_post(conn, account, store, food):
+    first, second, parsed = _two_overlapping(conn, account, store)
+    commit_statement(conn, first.statement_id, idempotency_key="k1")
+    before = journal_count(conn)
+    out = commit_statement(conn, second.statement_id, idempotency_key="k2")
+    assert (out.committed_count, out.skipped_count, out.already_committed) == (0, 2, False)
+    assert journal_count(conn) == before
+    ledger = LedgerService(conn)
+    assert ledger.account_balance(account) == parsed.closing_balance_minor
+    assert ledger.verify_integrity().is_clean
+    review = get_review(conn, second.statement_id)
+    assert [r["row_status"] for r in review.rows] == ["DUPLICATE", "DUPLICATE"]
+    assert all(r["duplicate_of_transaction_id"] for r in review.rows)
+    assert review.statement["processing_status"] == "APPROVED"
+
+
+def test_snapshot_written_when_everything_posts(conn, account, store):
+    result, parsed = staged(conn, account, store, [(D, "ATM", 1_000, 0)])
+    approve_pending(conn, result.statement_id)
+    assert commit_statement(conn, result.statement_id, idempotency_key="k").snapshot_written is True
+    row = conn.execute("SELECT balance_minor FROM account_balance_snapshots").fetchone()
+    assert row["balance_minor"] == parsed.closing_balance_minor
+
+
+def test_snapshot_skipped_when_a_row_was_rejected(conn, account, store):
+    result, _ = staged(conn, account, store, [(D, "ATM", 1_000, 0), (D, "FEE", 500, 0)])
+    rows = get_review(conn, result.statement_id).rows
+    update_row(conn, rows[0]["id"], row_status="USER_APPROVED")
+    update_row(conn, rows[1]["id"], row_status="REJECTED")
+    out = commit_statement(conn, result.statement_id, idempotency_key="k")
+    assert out.snapshot_written is False
+    assert conn.execute("SELECT COUNT(*) FROM account_balance_snapshots").fetchone()[0] == 0
+
+
+def test_overridden_duplicate_survives_the_commit_recheck(conn, account, store, food):
+    LedgerService(conn).record_expense(
+        source_account_id=account,
+        category_id=food,
+        amount_minor=25_000,
+        tx_date=D,
+        idempotency_key="manual",
+        external_reference="111111111111",
+    )
+    result, _ = staged(conn, account, store, [(D, upi("111111111111", "SWIGGY", "swiggy@ybl"), 25_000, 0)])
+    row = get_review(conn, result.statement_id).rows[0]
+    assert row["row_status"] == "DUPLICATE"
+    update_row(conn, row["id"], row_status="USER_APPROVED")
+    out = commit_statement(conn, result.statement_id, idempotency_key="k")
+    assert (out.committed_count, out.skipped_count) == (1, 0)
+    final = get_review(conn, result.statement_id).rows[0]
+    assert (final["row_status"], final["duplicate_override"]) == ("COMMITTED", 1)
+    sql = "SELECT COUNT(*) FROM transactions WHERE external_reference = '111111111111'"
+    assert conn.execute(sql).fetchone()[0] == 2
+    assert LedgerService(conn).verify_integrity().is_clean

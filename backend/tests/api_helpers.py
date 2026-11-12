@@ -19,6 +19,7 @@ from app.main import create_app
 
 API = "/api/v1"
 PASSWORD = "correct horse battery"
+SETUP_TOKEN = "setup-token-for-tests"
 JWT_SECRET = "test-secret-" + "x" * 40
 ORIGIN = "https://app.finsight.test"
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -41,13 +42,20 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "db_path": str(tmp_path / "api.db"),
         "jwt_secret": JWT_SECRET,
         "allowed_origins": [ORIGIN],
+        "setup_token": SETUP_TOKEN,
     }
     return Settings(**{**values, **overrides})
 
 
-def make_client(app: FastAPI) -> TestClient:
+def make_client(app: FastAPI, address: str = "testclient") -> TestClient:
     # https base URL so the Secure refresh cookie is sent back; 500s are returned, not re-raised.
-    return TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
+    return TestClient(
+        app, base_url="https://testserver", raise_server_exceptions=False, client=(address, 50000)
+    )
+
+
+def setup_body(**overrides: Any) -> dict[str, Any]:
+    return {"password": PASSWORD, "device_name": "Test browser", "setup_token": SETUP_TOKEN, **overrides}
 
 
 def key() -> dict[str, str]:
@@ -118,7 +126,7 @@ def build_env(tmp_path: Path, **setting_overrides: Any) -> ApiEnv:
     app = create_app(settings, clock=clock)
     client = make_client(app)
     anon = make_client(app)
-    response = client.post(f"{API}/auth/setup", json={"password": PASSWORD, "device_name": "Test browser"})
+    response = client.post(f"{API}/auth/setup", json=setup_body())
     assert response.status_code == 201, response.text
     data = response.json()["data"]
     client.headers["Authorization"] = f"Bearer {data['access_token']}"

@@ -74,16 +74,30 @@ DeviceId = Annotated[str, Depends(current_device_id)]
 _KEY_MAX_LENGTH = 128
 
 
-def idempotency_key(_device: DeviceId, idempotency_key: Annotated[str | None, Header()] = None) -> str:
+def idempotency_key(
+    request: Request, _device: DeviceId, idempotency_key: Annotated[str | None, Header()] = None
+) -> str:
+    """Return the client's key namespaced by method and route, so it cannot collide with another
+    endpoint's key or an internal ledger key (``opening-balance:*``, ``recategorize:*``, ``stmt:*``)."""
     key = (idempotency_key or "").strip()
     if not key:
         raise ApiError(400, "MISSING_IDEMPOTENCY_KEY", "The Idempotency-Key header is required.")
     if len(key) > _KEY_MAX_LENGTH or not key.isascii() or not key.isprintable():
         raise ApiError(400, "INVALID_IDEMPOTENCY_KEY", "The Idempotency-Key header is invalid.")
-    return key
+    route = request.scope.get("route")
+    template = getattr(route, "path", request.url.path)
+    return f"api:{request.method} {template}:{key}"
 
 
 IdempotencyKey = Annotated[str, Depends(idempotency_key)]
+
+
+def client_address(request: Request) -> str:
+    """Peer address only; X-Forwarded-For is deliberately not trusted."""
+    return request.client.host if request.client else "unknown"
+
+
+ClientAddress = Annotated[str, Depends(client_address)]
 
 
 def get_throttle(request: Request) -> security.LoginThrottle:

@@ -17,6 +17,7 @@ from tests.api_helpers import (
     build_env,
     make_client,
     make_settings,
+    setup_body,
 )
 
 CSRF = {"X-Requested-With": "finsight"}
@@ -90,14 +91,14 @@ def test_setup_runs_once_and_reports_status(tmp_path: Path) -> None:
     app = create_app(make_settings(tmp_path), clock=FakeClock())
     client = make_client(app)
     assert client.get(f"{API}/auth/status").json()["data"] == {"configured": False}
-    weak = client.post(f"{API}/auth/setup", json={"password": "short", "device_name": "x"})
+    weak = client.post(f"{API}/auth/setup", json=setup_body(password="short"))
     assert weak.status_code == 422
     assert weak.json()["error"]["code"] == "VALIDATION_ERROR"
 
-    first = client.post(f"{API}/auth/setup", json={"password": PASSWORD, "device_name": "Laptop"})
+    first = client.post(f"{API}/auth/setup", json=setup_body(device_name="Laptop"))
     assert first.status_code == 201
     assert client.get(f"{API}/auth/status").json()["data"] == {"configured": True}
-    second = client.post(f"{API}/auth/setup", json={"password": "another long password", "device_name": "x"})
+    second = client.post(f"{API}/auth/setup", json=setup_body(password="another long password"))
     assert second.status_code == 409
     assert second.json()["error"]["code"] == "ALREADY_CONFIGURED"
 
@@ -239,10 +240,12 @@ def test_reusing_a_rotated_refresh_token_revokes_the_device(env: ApiEnv) -> None
     rotated = env.client.post(f"{API}/auth/refresh", headers=CSRF)
     assert rotated.status_code == 200
     fresh_access = rotated.json()["data"]["access_token"]
+    env.clock.advance(seconds=31)  # outside the grace window
 
     replay = env.anon.post(f"{API}/auth/refresh", headers={**CSRF, "Cookie": f"fs_refresh={stolen}"})
     assert replay.status_code == 401
     assert replay.json()["error"]["code"] == "INVALID_REFRESH_TOKEN"
+    assert "fs_refresh" in replay.headers["set-cookie"]  # cookie cleared: the session is gone
     assert env.sql("SELECT is_revoked FROM devices WHERE id = ?", (env.device_id,))[0][0] == 1
     # The legitimate (rotated) session is dead too, including its access token.
     assert env.anon.get(f"{API}/accounts", headers=bearer(fresh_access)).status_code == 401
@@ -298,3 +301,153 @@ def test_audit_events_written_for_logins(env: ApiEnv) -> None:
     assert len(rows) == 2  # setup session + this login
     assert env.client.post(f"{API}/auth/device-revoke", json={"device_id": env.device_id}).status_code == 200
     assert env.sql("SELECT COUNT(*) FROM audit_events WHERE event_type = 'DEVICE_REVOKED'")[0][0] == 1
+
+
+# ------------------------------------------------- refresh grace window
+
+
+def test_stale_refresh_within_grace_is_refused_without_revoking(env: ApiEnv) -> None:
+    first_cookie = env.client.cookies["fs_refresh"]
+    first = env.client.post(f"{API}/auth/refresh", headers=CSRF)
+    assert first.status_code == 200
+    second = env.anon.post(f"{API}/auth/refresh", headers={**CSRF, "Cookie": f"fs_refresh={first_cookie}"})
+    assert second.status_code == 401
+    assert second.json()["error"]["code"] == "INVALID_REFRESH_TOKEN"
+    assert "set-cookie" not in second.headers  # the browser keeps the cookie from the first refresh
+    assert env.sql("SELECT is_revoked FROM devices WHERE id = ?", (env.device_id,))[0][0] == 0
+    assert env.sql("SELECT COUNT(*) FROM audit_events WHERE event_type = 'DEVICE_REVOKED'")[0][0] == 0
+    access = first.json()["data"]["access_token"]
+    assert env.anon.get(f"{API}/accounts", headers=bearer(access)).status_code == 200
+    assert env.client.post(f"{API}/auth/refresh", headers=CSRF).status_code == 200
+
+
+def test_stale_refresh_after_grace_revokes(env: ApiEnv) -> None:
+    first_cookie = env.client.cookies["fs_refresh"]
+    assert env.client.post(f"{API}/auth/refresh", headers=CSRF).status_code == 200
+    env.clock.advance(seconds=security.REFRESH_REUSE_GRACE_SECONDS + 1)
+    late = env.anon.post(f"{API}/auth/refresh", headers={**CSRF, "Cookie": f"fs_refresh={first_cookie}"})
+    assert late.status_code == 401
+    assert env.sql("SELECT is_revoked FROM devices WHERE id = ?", (env.device_id,))[0][0] == 1
+
+
+def test_only_the_immediate_predecessor_is_tolerated(env: ApiEnv) -> None:
+    oldest = env.client.cookies["fs_refresh"]
+    env.client.post(f"{API}/auth/refresh", headers=CSRF)
+    env.client.post(f"{API}/auth/refresh", headers=CSRF)
+    replay = env.anon.post(f"{API}/auth/refresh", headers={**CSRF, "Cookie": f"fs_refresh={oldest}"})
+    assert replay.status_code == 401
+    assert env.sql("SELECT is_revoked FROM devices WHERE id = ?", (env.device_id,))[0][0] == 1
+
+
+def test_session_older_than_90_days_cannot_refresh(env: ApiEnv) -> None:
+    for _ in range(3):  # stay active so only the absolute lifetime can end the session
+        env.clock.advance(days=25)
+        assert env.client.post(f"{API}/auth/refresh", headers=CSRF).status_code == 200
+    env.clock.advance(days=16)  # 91 days after sign-in
+    response = env.client.post(f"{API}/auth/refresh", headers=CSRF)
+    assert response.status_code == 401
+    assert env.sql("SELECT is_revoked FROM devices WHERE id = ?", (env.device_id,))[0][0] == 1
+    reasons = env.sql("SELECT metadata_json FROM audit_events WHERE event_type = 'DEVICE_REVOKED'")
+    assert "SESSION_LIFETIME_EXCEEDED" in reasons[0][0]
+
+
+# ----------------------------------------------------- per-address throttle
+
+
+def test_throttle_is_per_address(env: ApiEnv) -> None:
+    attacker = make_client(env.app, "203.0.113.9")
+    for _ in range(5):
+        assert login(attacker, "wrong password here").status_code == 401
+    assert login(attacker).status_code == 429
+    owner = make_client(env.app, "198.51.100.7")
+    assert login(owner).status_code == 200
+
+
+def test_forwarded_for_header_is_not_trusted(env: ApiEnv) -> None:
+    attacker = make_client(env.app, "203.0.113.9")
+    for index in range(5):
+        attacker.post(
+            f"{API}/auth/login",
+            json={"password": "wrong password here", "device_name": "x"},
+            headers={"X-Forwarded-For": f"10.0.0.{index}"},
+        )
+    assert login(attacker).status_code == 429
+
+
+def test_global_failure_ceiling_blocks_everyone(env: ApiEnv) -> None:
+    for index in range(10):  # 10 addresses x 5 failures = 50
+        client = make_client(env.app, f"192.0.2.{index}")
+        for _ in range(5):
+            assert login(client, "wrong password here").status_code == 401
+    owner = make_client(env.app, "198.51.100.7")
+    assert login(owner).status_code == 429
+    env.clock.advance(minutes=16)
+    assert login(owner).status_code == 200
+
+
+# ----------------------------------------------------------- setup token
+
+SETUP_URL = f"{API}/auth/setup"
+
+
+def fresh_app_client(tmp_path: Path, **overrides):
+    app = create_app(make_settings(tmp_path, **overrides), clock=FakeClock())
+    return app, make_client(app)
+
+
+def test_setup_requires_the_setup_token(tmp_path: Path) -> None:
+    _, client = fresh_app_client(tmp_path)
+    body = setup_body()
+    del body["setup_token"]
+    assert client.post(SETUP_URL, json=body).status_code == 422
+    wrong = client.post(SETUP_URL, json=setup_body(setup_token="not-the-token"))
+    assert wrong.status_code == 403
+    assert wrong.json()["error"]["code"] == "INVALID_SETUP_TOKEN"
+    assert client.get(f"{API}/auth/status").json()["data"] == {"configured": False}
+    assert client.post(SETUP_URL, json=setup_body()).status_code == 201
+
+
+def test_setup_disabled_when_token_not_configured(tmp_path: Path) -> None:
+    _, client = fresh_app_client(tmp_path, setup_token=None)
+    response = client.post(SETUP_URL, json=setup_body())
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SETUP_TOKEN_NOT_CONFIGURED"
+    assert client.get(f"{API}/auth/status").json()["data"] == {"configured": False}
+
+
+def test_wrong_setup_tokens_are_throttled_per_address(tmp_path: Path) -> None:
+    app, client = fresh_app_client(tmp_path)
+    for _ in range(5):
+        assert client.post(SETUP_URL, json=setup_body(setup_token="guess")).status_code == 403
+    assert client.post(SETUP_URL, json=setup_body()).status_code == 429  # even the right token
+    other = make_client(app, "198.51.100.7")
+    assert other.post(SETUP_URL, json=setup_body()).status_code == 201
+
+
+# ------------------------------------------------------------ JWT negatives
+
+
+def _forge(claims: dict, secret: str = JWT_SECRET, algorithm: str = "HS256") -> str:
+    key = None if algorithm == "none" else secret
+    return jwt.encode(claims, key, algorithm=algorithm)
+
+
+def test_malformed_jwts_are_rejected(env: ApiEnv) -> None:
+    exp = int(env.clock().timestamp()) + 600
+    valid = {"sub": env.device_id, "jti": "j", "exp": exp}
+    good = _forge(valid)
+    head, _payload, signature = good.split(".")
+    tampered_payload = _forge({**valid, "sub": "someone-else"}).split(".")[1]
+    candidates = {
+        "alg_none": _forge(valid, algorithm="none"),
+        "missing_exp": _forge({"sub": env.device_id, "jti": "j"}),
+        "missing_sub": _forge({"jti": "j", "exp": exp}),
+        "tampered_payload": f"{head}.{tampered_payload}.{signature}",
+        "non_string_sub": _forge({**valid, "sub": 12345}),
+        "other_secret": _forge(valid, secret="z" * 40),
+        "expired": _forge({**valid, "exp": exp - 3600}),
+    }
+    assert env.anon.get(f"{API}/accounts", headers=bearer(good)).status_code == 200  # control
+    for name, token in candidates.items():
+        response = env.anon.get(f"{API}/accounts", headers=bearer(token))
+        assert response.status_code == 401, name

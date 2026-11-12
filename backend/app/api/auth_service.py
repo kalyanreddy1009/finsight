@@ -17,10 +17,6 @@ def to_iso(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def invalid_refresh() -> ApiError:
-    return ApiError(401, "INVALID_REFRESH_TOKEN", "Session expired. Please sign in again.")
-
-
 def is_configured(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM owner_credentials WHERE id = 1").fetchone() is not None
 
@@ -30,11 +26,12 @@ def get_password_hash(conn: sqlite3.Connection) -> str | None:
     return row["password_hash"] if row else None
 
 
-def create_owner(conn: sqlite3.Connection, password: str, device_name: str, now: datetime) -> tuple[str, str]:
+def create_owner(
+    conn: sqlite3.Connection, password_hash: str, device_name: str, now: datetime
+) -> tuple[str, str]:
     """Store the owner credential (once) and open the first session; returns (device_id, refresh)."""
     if is_configured(conn):
         raise ApiError(409, "ALREADY_CONFIGURED", "FinSight is already set up.")
-    password_hash = security.hash_password(password)
     with transaction(conn):
         if is_configured(conn):
             raise ApiError(409, "ALREADY_CONFIGURED", "FinSight is already set up.")
@@ -100,34 +97,68 @@ def revoke_device(
     return True
 
 
+class RefreshRejected(ApiError):
+    """A refresh attempt failed; ``clear_cookie`` is False on the benign stale-token (grace) path."""
+
+    def __init__(self, *, clear_cookie: bool) -> None:
+        super().__init__(401, "INVALID_REFRESH_TOKEN", "Session expired. Please sign in again.")
+        self.clear_cookie = clear_cookie
+
+
+def _within_grace(device: sqlite3.Row, presented: str, now: datetime) -> bool:
+    prev, rotated_at = device["prev_refresh_token_hash"], device["refresh_rotated_at"]
+    if prev is None or rotated_at is None or not security.tokens_match(presented, prev):
+        return False
+    elapsed = (now - datetime.fromisoformat(rotated_at)).total_seconds()
+    return 0 <= elapsed <= security.REFRESH_REUSE_GRACE_SECONDS
+
+
+def _expiry_reason(device: sqlite3.Row, now: datetime) -> str | None:
+    if now - datetime.fromisoformat(device["created_at"]) > timedelta(
+        seconds=security.ABSOLUTE_SESSION_LIFETIME_SECONDS
+    ):
+        return "SESSION_LIFETIME_EXCEEDED"
+    if now - datetime.fromisoformat(device["last_seen_at"]) > timedelta(
+        seconds=security.REFRESH_TOKEN_TTL_SECONDS
+    ):
+        return "SESSION_IDLE_EXPIRED"
+    return None
+
+
 def rotate_refresh(conn: sqlite3.Connection, presented: str, now: datetime) -> tuple[str, str]:
-    """Validate and rotate a refresh token; a stale (reused) token revokes its device."""
+    """Validate and rotate a refresh token.
+
+    A token that was rotated out moments ago is refused without revoking anything (grace path);
+    any other token that does not match a known device's current hash revokes that device.
+    """
     device_id, _, secret = presented.partition(".")
     if not secret:
-        raise invalid_refresh()
+        raise RefreshRejected(clear_cookie=True)
     with transaction(conn):
-        device = find_active_device(conn, device_id)
-        if device is None:
-            raise invalid_refresh()
-        if not security.tokens_match(presented, device["refresh_token_hash"]):
-            revoke_device(conn, device_id, device_id, now, "REFRESH_TOKEN_REUSE")
-            reused = True
+        device = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        if device is None or device["is_revoked"]:
+            raise RefreshRejected(clear_cookie=True)
+        if security.tokens_match(presented, device["refresh_token_hash"]):
+            reason = _expiry_reason(device, now)
+            if reason is None:
+                return device_id, _rotate(conn, device, now)
+        elif _within_grace(device, presented, now):
+            raise RefreshRejected(clear_cookie=False)
         else:
-            reused = False
-    if reused:
-        raise invalid_refresh()
-    idle_limit = timedelta(seconds=security.REFRESH_TOKEN_TTL_SECONDS)
-    if now - datetime.fromisoformat(device["last_seen_at"]) > idle_limit:
-        raise invalid_refresh()
-    replacement = _new_refresh_token(device_id)
-    cursor = conn.execute(
-        "UPDATE devices SET refresh_token_hash = ?, last_seen_at = ? "
-        "WHERE id = ? AND refresh_token_hash = ? AND is_revoked = 0",
-        (security.hash_refresh_token(replacement), to_iso(now), device_id, device["refresh_token_hash"]),
+            reason = "REFRESH_TOKEN_REUSE"
+        revoke_device(conn, device_id, device_id, now, reason)
+    raise RefreshRejected(clear_cookie=True)
+
+
+def _rotate(conn: sqlite3.Connection, device: sqlite3.Row, now: datetime) -> str:
+    replacement = _new_refresh_token(device["id"])
+    stamp = to_iso(now)
+    conn.execute(
+        "UPDATE devices SET refresh_token_hash = ?, prev_refresh_token_hash = ?, refresh_rotated_at = ?, "
+        "last_seen_at = ? WHERE id = ?",
+        (security.hash_refresh_token(replacement), device["refresh_token_hash"], stamp, stamp, device["id"]),
     )
-    if cursor.rowcount != 1:
-        raise invalid_refresh()
-    return device_id, replacement
+    return replacement
 
 
 def list_devices(conn: sqlite3.Connection) -> list[sqlite3.Row]:

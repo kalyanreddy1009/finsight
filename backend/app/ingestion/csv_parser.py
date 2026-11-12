@@ -15,6 +15,7 @@ from app.ingestion.drift_guard import compute_layout_fingerprint, normalise_head
 from app.ingestion.normalizer import RawParsedRow
 
 MAX_DATA_ROWS = 20_000
+MAX_ROW_AMOUNT_MINOR = 10**15
 CSV_SUFFIX = ".csv"
 PAGE_NUMBER = 1
 
@@ -114,11 +115,16 @@ def _parse_amount(text: str, column: str, row_number: int) -> int:
     cleaned = _DR_CR_SUFFIX_RE.sub("", cleaned)
     cleaned = cleaned.replace(",", "").replace(" ", "")
     try:
-        return to_minor(cleaned)
+        amount_minor = to_minor(cleaned)
     except ValueError as exc:
         raise StatementParseError(
             f"CSV_BAD_AMOUNT: data row {row_number} has an invalid {column} amount"
         ) from exc
+    if abs(amount_minor) > MAX_ROW_AMOUNT_MINOR:
+        raise StatementParseError(
+            f"CSV_BAD_AMOUNT: data row {row_number} has a {column} amount above the supported limit"
+        )
+    return amount_minor
 
 
 def _row_amounts(cells: list[str], layout: _ColumnLayout, row_number: int) -> tuple[int, int]:

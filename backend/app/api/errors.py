@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.envelope import fail
+from app.finance.ledger_service import IdempotencyConflictError
 
 logger = logging.getLogger("finsight.api")
 
@@ -79,9 +80,36 @@ async def _request_validation_error(_: Request, exc: RequestValidationError) -> 
     return _respond(422, "VALIDATION_ERROR", "; ".join(parts) or "Invalid request.")
 
 
+_DOMAIN_MODULE_PREFIXES = ("app.finance.", "app.ingestion.")
+_GENERIC_VALIDATION_MESSAGE = "The request could not be processed."
+
+
+def _raised_by_domain_code(exc: BaseException) -> bool:
+    """True when the innermost Python frame of the traceback is ledger/chart/ingestion code."""
+    tb = exc.__traceback__
+    if tb is None:
+        return False
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    module = tb.tb_frame.f_globals.get("__name__", "")
+    return module.startswith(_DOMAIN_MODULE_PREFIXES)
+
+
+async def _idempotency_conflict(_: Request, exc: IdempotencyConflictError) -> JSONResponse:
+    return _respond(
+        409, "IDEMPOTENCY_KEY_REUSED", "This Idempotency-Key was already used for a different request."
+    )
+
+
 async def _value_error(_: Request, exc: ValueError) -> JSONResponse:
-    """Ledger/chart ValueErrors carry user-safe messages; 'Unknown ...' means a missing referenced id."""
-    message = str(exc) or "Invalid request."
+    """Domain ValueErrors carry user-safe messages ('Unknown ...' = missing referenced id).
+
+    A ValueError from anywhere else (parsing libraries, framework code) gets a fixed message.
+    """
+    if not _raised_by_domain_code(exc):
+        logger.warning("Unmapped ValueError: %s", exc)
+        return _respond(422, "VALIDATION_ERROR", _GENERIC_VALIDATION_MESSAGE)
+    message = str(exc) or _GENERIC_VALIDATION_MESSAGE
     if message.startswith("Unknown"):
         return _respond(404, "NOT_FOUND", message)
     return _respond(422, "VALIDATION_ERROR", message)
@@ -106,6 +134,7 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, _api_error)  # type: ignore[arg-type]
     app.add_exception_handler(StarletteHTTPException, _http_error)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _request_validation_error)  # type: ignore[arg-type]
+    app.add_exception_handler(IdempotencyConflictError, _idempotency_conflict)  # type: ignore[arg-type]
     app.add_exception_handler(ValueError, _value_error)  # type: ignore[arg-type]
     app.add_exception_handler(TypeError, _type_error)  # type: ignore[arg-type]
     app.add_exception_handler(sqlite3.IntegrityError, _integrity_error)  # type: ignore[arg-type]

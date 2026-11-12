@@ -24,6 +24,7 @@ CREATE TABLE statement_rows (
     duplicate_of_transaction_id TEXT REFERENCES transactions(id),
     provisional_match_transaction_id TEXT REFERENCES transactions(id),
     committed_transaction_id TEXT REFERENCES transactions(id),
+    duplicate_override INTEGER NOT NULL DEFAULT 0 CHECK (duplicate_override IN (0, 1)),
     UNIQUE (statement_id, row_index)
 );
 

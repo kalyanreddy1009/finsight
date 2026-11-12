@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     cloud_ai_enabled: bool = False
     # Signs access tokens; must be at least 32 bytes. Required to start the API.
     jwt_secret: SecretStr | None = None
+    # One-time secret that must accompany POST /auth/setup (first-run owner creation).
+    setup_token: SecretStr | None = None
     # Hex-encoded 32-byte key for AES-256-GCM (PDF password rules, stored statement files).
     master_key: SecretStr | None = None
     docs_dir: str = "docs_store"

@@ -260,15 +260,52 @@ def test_update_row_rejects_invalid_changes(conn, account, store, food):
         update_row(conn, row_id, row_status="USER_APPROVED")
 
 
-def test_duplicate_rows_cannot_be_edited(conn, account, store, food):
+def _duplicate_row(conn, account, store, food, amount=25_000):
     LedgerService(conn).record_expense(
-        source_account_id=account, category_id=food, amount_minor=25_000, tx_date=D,
-        idempotency_key="k1", external_reference="111111111111",
-    )  # fmt: skip
-    parsed = make_statement([(D, upi("111111111111", "SWIGGY", "swiggy@ybl"), 25_000, 0)])
-    row = rows_of(conn, ingest(conn, account, parsed, store).statement_id)[0]
+        source_account_id=account,
+        category_id=food,
+        amount_minor=25_000,
+        tx_date=D,
+        idempotency_key="k1",
+        external_reference="111111111111",
+    )
+    parsed = make_statement([(D, upi("111111111111", "SWIGGY", "swiggy@ybl"), amount, 0)])
+    return rows_of(conn, ingest(conn, account, parsed, store).statement_id)[0]
+
+
+def test_duplicate_row_can_be_overridden_but_not_rejected(conn, account, store, food):
+    row = _duplicate_row(conn, account, store, food)
+    assert row["row_status"] == "DUPLICATE"
     with pytest.raises(InvalidRowUpdateError):
-        update_row(conn, row["id"], row_status="USER_APPROVED")
+        update_row(conn, row["id"], row_status="REJECTED")
+    with pytest.raises(InvalidRowUpdateError):
+        update_row(conn, row["id"], suggested_category_id=food)
+    update_row(conn, row["id"], row_status="USER_APPROVED")
+    again = conn.execute("SELECT * FROM statement_rows WHERE id = ?", (row["id"],)).fetchone()
+    assert (again["row_status"], again["duplicate_override"]) == ("USER_APPROVED", 1)
+
+
+def test_committed_rows_are_immutable(conn, account, store):
+    result = ingest(conn, account, make_statement([(D, "ATM", 1_000, 0)]), store)
+    row_id = rows_of(conn, result.statement_id)[0]["id"]
+    conn.execute("UPDATE statement_rows SET row_status = 'COMMITTED' WHERE id = ?", (row_id,))
+    with pytest.raises(InvalidRowUpdateError):
+        update_row(conn, row_id, row_status="PENDING_REVIEW")
+
+
+def test_reference_match_with_different_amount_is_not_a_duplicate(conn, account, store, food):
+    row = _duplicate_row(conn, account, store, food, amount=26_000)
+    assert row["row_status"] != "DUPLICATE"
+    assert row["duplicate_of_transaction_id"] is None
+
+
+def test_merchants_are_loaded_once_per_ingest(conn, account, store, food):
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql) if "FROM merchants" in sql else None)
+    parsed = make_statement([(D, "A", 1_000, 0), (D, "B", 1_000, 0), (D, "C", 1_000, 0)])
+    ingest(conn, account, parsed, store)
+    conn.set_trace_callback(None)
+    assert len(queries) == 1
 
 
 def test_document_store_failure_leaves_no_rows(conn, account):

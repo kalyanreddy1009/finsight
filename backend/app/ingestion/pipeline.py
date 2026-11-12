@@ -16,14 +16,15 @@ from app.ingestion.normalizer import (
     NormalizationResult,
     NormalizedTransactionCandidate,
 )
-from app.ingestion.rule_categorizer import categorize
+from app.ingestion.rule_categorizer import categorize, load_merchants
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 AUTO_APPROVE_CONFIDENCE = 0.95
 PROVISIONAL_WINDOW_DAYS = 3
 STATEMENT_KINDS = ("BANK_PDF", "CARD_PDF", "CSV", "CAS_PDF")
 _PDF_SIGNATURE = b"%PDF-1."
-_EDITABLE_STATUSES = ("PENDING_REVIEW", "AUTO_APPROVED", "USER_APPROVED", "REJECTED")
+_EDITABLE_STATUSES = ("PENDING_REVIEW", "AUTO_APPROVED", "USER_APPROVED", "REJECTED", "DUPLICATE")
+_DUPLICATE_OVERRIDE_TARGETS = ("PENDING_REVIEW", "USER_APPROVED")
 _TARGET_STATUSES = ("PENDING_REVIEW", "USER_APPROVED", "REJECTED")
 
 
@@ -119,33 +120,62 @@ def _known_fingerprint(conn: sqlite3.Connection, account_id: str, parser_name: s
 # ------------------------------------------------------------- row classification
 
 
-def _find_duplicate(
-    conn: sqlite3.Connection, account_id: str, c: NormalizedTransactionCandidate
+def find_duplicate_transaction(
+    conn: sqlite3.Connection,
+    account_id: str,
+    *,
+    direction: str,
+    amount_minor: int,
+    external_reference: str | None,
+    dedup_fingerprint: str,
+    exclude_statement_id: str | None = None,
 ) -> str | None:
+    """Id of an existing live transaction that this row repeats, or None.
+
+    A reference match must also agree on amount and direction. Transactions that came from
+    ``exclude_statement_id`` are ignored, so rows of one statement never duplicate each other.
+    """
     row = conn.execute(
         "SELECT id FROM transactions WHERE account_id = ? "
         "AND review_status NOT IN ('SUPERSEDED', 'PROVISIONAL') "
-        "AND ((? IS NOT NULL AND external_reference = ?) OR dedup_fingerprint = ?) "
+        "AND (statement_id IS NULL OR statement_id IS NOT ?) "
+        "AND ((? IS NOT NULL AND external_reference = ? AND amount_minor = ? AND direction = ?) "
+        "OR dedup_fingerprint = ?) "
         "ORDER BY transaction_date, id LIMIT 1",
-        (account_id, c.external_utr, c.external_utr, c.dedup_fingerprint),
+        (
+            account_id,
+            exclude_statement_id,
+            external_reference,
+            external_reference,
+            amount_minor,
+            direction,
+            dedup_fingerprint,
+        ),
     ).fetchone()
     return None if row is None else row["id"]
 
 
-def _find_provisional(
-    conn: sqlite3.Connection, account_id: str, c: NormalizedTransactionCandidate, claimed: set[str]
+def find_provisional_match(
+    conn: sqlite3.Connection,
+    account_id: str,
+    *,
+    direction: str,
+    amount_minor: int,
+    tx_date: date,
+    external_reference: str | None,
+    claimed: set[str],
 ) -> str | None:
     rows = conn.execute(
         "SELECT id, transaction_date, external_reference FROM transactions WHERE account_id = ? "
         "AND review_status = 'PROVISIONAL' AND direction = ? AND amount_minor = ?",
-        (account_id, c.direction, c.amount_minor),
+        (account_id, direction, amount_minor),
     ).fetchall()
     best: tuple[int, str] | None = None
     for row in rows:
         if row["id"] in claimed:
             continue
-        gap = abs((date.fromisoformat(row["transaction_date"]) - c.tx_date).days)
-        same_ref = c.external_utr is not None and row["external_reference"] == c.external_utr
+        gap = abs((date.fromisoformat(row["transaction_date"]) - tx_date).days)
+        same_ref = external_reference is not None and row["external_reference"] == external_reference
         if (gap <= PROVISIONAL_WINDOW_DAYS or same_ref) and (best is None or (gap, row["id"]) < best):
             best = (gap, row["id"])
     return None if best is None else best[1]
@@ -160,15 +190,34 @@ def _stage_rows(
 ) -> list[_StagedRow]:
     claimed: set[str] = set()
     staged: list[_StagedRow] = []
+    merchants = load_merchants(conn)
     for raw, c in zip(parsed.rows, result.candidates, strict=True):
-        duplicate_of = _find_duplicate(conn, account_id, c)
+        duplicate_of = find_duplicate_transaction(
+            conn,
+            account_id,
+            direction=c.direction,
+            amount_minor=c.amount_minor,
+            external_reference=c.external_utr,
+            dedup_fingerprint=c.dedup_fingerprint,
+        )
         match = categorize(
             conn,
             clean_description=c.clean_description,
             extracted_vpa=c.extracted_vpa,
             direction=c.direction,
+            merchants=merchants,
         )
-        provisional = None if duplicate_of else _find_provisional(conn, account_id, c, claimed)
+        provisional = None
+        if duplicate_of is None:
+            provisional = find_provisional_match(
+                conn,
+                account_id,
+                direction=c.direction,
+                amount_minor=c.amount_minor,
+                tx_date=c.tx_date,
+                external_reference=c.external_utr,
+                claimed=claimed,
+            )
         if provisional:
             claimed.add(provisional)
         auto = match.confidence >= AUTO_APPROVE_CONFIDENCE and c.balance_verified and reconciled
@@ -351,7 +400,8 @@ def update_row(
         raise InvalidRowUpdateError("Row status cannot be set to that value.")
     with transaction(conn):
         row = conn.execute(
-            "SELECT r.id, r.row_status, r.direction, s.processing_status FROM statement_rows r "
+            "SELECT r.id, r.row_status, r.direction, r.duplicate_override, s.processing_status "
+            "FROM statement_rows r "
             "JOIN statements s ON s.id = r.statement_id WHERE r.id = ?",
             (row_id,),
         ).fetchone()
@@ -359,6 +409,9 @@ def update_row(
             raise RowNotFoundError("Unknown statement row.")
         if row["processing_status"] != "REVIEW_REQUIRED" or row["row_status"] not in _EDITABLE_STATUSES:
             raise InvalidRowUpdateError("This row can no longer be changed.")
+        is_duplicate = row["row_status"] == "DUPLICATE"
+        if is_duplicate and row_status not in _DUPLICATE_OVERRIDE_TARGETS:
+            raise InvalidRowUpdateError("A duplicate row can only be overridden to pending or approved.")
         if suggested_category_id is not None:
             _check_category(conn, suggested_category_id, row["direction"])
             conn.execute(
@@ -366,7 +419,10 @@ def update_row(
                 (suggested_category_id, row_id),
             )
         if row_status is not None:
-            conn.execute("UPDATE statement_rows SET row_status = ? WHERE id = ?", (row_status, row_id))
+            conn.execute(
+                "UPDATE statement_rows SET row_status = ?, duplicate_override = ? WHERE id = ?",
+                (row_status, 1 if is_duplicate else row["duplicate_override"], row_id),
+            )
 
 
 def _check_category(conn: sqlite3.Connection, category_id: str, direction: str) -> None:

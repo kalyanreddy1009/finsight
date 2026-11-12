@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from app.ingestion.base_parser import ParsedStatement, StatementParseError
-from app.ingestion.csv_parser import MAX_DATA_ROWS, GenericCsvParser
+from app.ingestion.csv_parser import MAX_DATA_ROWS, MAX_ROW_AMOUNT_MINOR, GenericCsvParser
 from app.ingestion.drift_guard import compute_layout_fingerprint
 
 FILENAME = "statement.csv"
@@ -347,6 +347,61 @@ def test_too_many_data_rows_is_rejected():
 
     # Act / Assert
     with pytest.raises(StatementParseError, match="CSV_TOO_MANY_ROWS"):
+        GenericCsvParser().parse(content, FILENAME)
+
+
+MAX_AMOUNT_TEXT = "10000000000000.00"  # MAX_ROW_AMOUNT_MINOR paise
+ABOVE_MAX_AMOUNT_TEXT = "10000000000000.01"
+
+LIMIT_CELL_LINES = {
+    "debit": (SPLIT_HEADER, "01/03/2026,Big,{value},"),
+    "credit": (SPLIT_HEADER, "01/03/2026,Big,,{value}"),
+    "signed_amount": ("Date,Description,Amount", "01/03/2026,Big,{value}"),
+    "balance": (DEFAULT_HEADER, "01/03/2026,Big,1.00,,{value}"),
+}
+
+
+def _limit_cell_content(cell: str, value: str) -> bytes:
+    header, line = LIMIT_CELL_LINES[cell]
+    return _csv(line.format(value=value), header=header)
+
+
+@pytest.mark.parametrize("cell", list(LIMIT_CELL_LINES))
+def test_amount_exactly_at_limit_is_accepted(cell):
+    # Arrange
+    content = _limit_cell_content(cell, MAX_AMOUNT_TEXT)
+
+    # Act
+    statement = GenericCsvParser().parse(content, FILENAME)
+
+    # Assert
+    row = statement.rows[0]
+    if cell == "debit":
+        assert row.debit_minor == MAX_ROW_AMOUNT_MINOR
+    elif cell == "credit":
+        assert row.credit_minor == MAX_ROW_AMOUNT_MINOR
+    elif cell == "signed_amount":
+        assert row.credit_minor == MAX_ROW_AMOUNT_MINOR
+    else:
+        assert row.stated_running_balance_minor == MAX_ROW_AMOUNT_MINOR
+
+
+@pytest.mark.parametrize("cell", list(LIMIT_CELL_LINES))
+def test_amount_one_paisa_above_limit_is_rejected_naming_the_row(cell):
+    # Arrange
+    content = _limit_cell_content(cell, ABOVE_MAX_AMOUNT_TEXT)
+
+    # Act / Assert
+    with pytest.raises(StatementParseError, match="CSV_BAD_AMOUNT: data row 1"):
+        GenericCsvParser().parse(content, FILENAME)
+
+
+def test_negative_signed_amount_beyond_limit_is_rejected():
+    # Arrange
+    content = _limit_cell_content("signed_amount", "-" + ABOVE_MAX_AMOUNT_TEXT)
+
+    # Act / Assert
+    with pytest.raises(StatementParseError, match="CSV_BAD_AMOUNT: data row 1"):
         GenericCsvParser().parse(content, FILENAME)
 
 

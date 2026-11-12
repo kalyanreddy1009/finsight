@@ -1,3 +1,5 @@
+import base64
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -464,3 +466,124 @@ def test_recategorize_income_and_rejects_unsupported_transactions(env: ApiEnv, w
     reversal = env.client.post(f"{API}/transactions/{spent['id']}/reverse", headers=key()).json()["data"]
     assert patch(env, spent["id"], {"category_id": world["travel"]}, version="1").status_code == 422
     assert patch(env, reversal["id"], {"category_id": world["travel"]}).status_code == 422
+
+
+# ------------------------------------------------- hardening (review round 1)
+
+
+def test_idempotency_key_is_independent_per_endpoint(env: ApiEnv, world: dict[str, str]) -> None:
+    shared = {"Idempotency-Key": "same-client-key"}
+    body = {
+        "kind": "expense",
+        "account_id": world["bank"],
+        "category_id": world["dining"],
+        "amount_minor": 5_000,
+        "transaction_date": DAY,
+    }
+    created = env.client.post(f"{API}/transactions", json=body, headers=shared)
+    assert created.status_code == 201
+    reversed_ = env.client.post(f"{API}/transactions/{created.json()['data']['id']}/reverse", headers=shared)
+    assert reversed_.status_code == 201  # not mistaken for a replay of the create call
+    assert reversed_.json()["data"]["entry_type"] == "REVERSAL"
+    assert (
+        env.client.post(f"{API}/transactions", json=body, headers=shared).json()["data"]["id"]
+        == (created.json()["data"]["id"])
+    )
+
+
+def test_client_key_cannot_collide_with_internal_keys(env: ApiEnv, world: dict[str, str]) -> None:
+    spent = env.expense(world["bank"], world["dining"], 5_000, DAY)
+    entry_key = env.sql(
+        "SELECT idempotency_key FROM journal_entries WHERE id = ?", (spent["journal_entry_id"],)
+    )
+    assert entry_key[0][0].startswith("api:POST /transactions:")
+    opening = env.sql("SELECT idempotency_key FROM journal_entries WHERE entry_type = 'OPENING_BALANCE'")
+    assert opening[0][0].startswith("opening-balance:")
+    body = {
+        "kind": "expense",
+        "account_id": world["bank"],
+        "category_id": world["dining"],
+        "amount_minor": 1,
+        "transaction_date": DAY,
+    }
+    attempt = env.client.post(
+        f"{API}/transactions", json=body, headers={"Idempotency-Key": f"opening-balance:{world['bank']}"}
+    )
+    assert attempt.status_code == 201
+
+
+def test_idempotency_key_reused_with_different_arguments_is_409(env: ApiEnv, world: dict[str, str]) -> None:
+    headers = key()
+    body = {
+        "kind": "expense",
+        "account_id": world["bank"],
+        "category_id": world["dining"],
+        "amount_minor": 5_000,
+        "transaction_date": DAY,
+    }
+    assert env.client.post(f"{API}/transactions", json=body, headers=headers).status_code == 201
+    clash = env.client.post(f"{API}/transactions", json={**body, "amount_minor": 6_000}, headers=headers)
+    assert clash.status_code == 409
+    assert clash.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+
+@pytest.mark.parametrize("length", [0, 129])
+def test_idempotency_key_length_bounds(env: ApiEnv, world: dict[str, str], length: int) -> None:
+    body = {
+        "kind": "expense",
+        "account_id": world["bank"],
+        "category_id": world["dining"],
+        "amount_minor": 1,
+        "transaction_date": DAY,
+    }
+    response = env.client.post(f"{API}/transactions", json=body, headers={"Idempotency-Key": "k" * length})
+    assert response.status_code == 400
+
+
+def _cursor(payload: object) -> str:
+    raw = payload if isinstance(payload, str) else json.dumps(payload)
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        _cursor("not json at all"),
+        _cursor(["2026-11-01"]),
+        _cursor(["2026-11-01", "id", "extra"]),
+        _cursor([1, 2]),
+        _cursor(["2026-11-01", 7]),
+        _cursor(["not-a-date", "id"]),
+        _cursor({"a": 1}),
+        "@@@",
+    ],
+)
+def test_garbage_cursors_are_422(env: ApiEnv, cursor: str) -> None:
+    response = env.client.get(f"{API}/transactions", params={"cursor": cursor})
+    assert response.status_code == 422, cursor
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_like_wildcards_in_q_match_literally(env: ApiEnv, world: dict[str, str]) -> None:
+    env.expense(world["bank"], world["dining"], 100, DAY, description="50% off")
+    env.expense(world["bank"], world["dining"], 200, DAY, description="snake_case")
+    env.expense(world["bank"], world["dining"], 300, DAY, description="plain")
+
+    def amounts(q: str) -> list[int]:
+        rows = env.client.get(f"{API}/transactions", params={"q": q}).json()["data"]
+        return sorted(r["amount_minor"] for r in rows)
+
+    assert amounts("%") == [100]
+    assert amounts("_") == [200]
+    assert amounts("\\") == []
+
+
+def test_unmapped_value_error_returns_a_fixed_message(env: ApiEnv) -> None:
+    @env.app.get("/leaky")
+    async def leaky() -> None:
+        raise ValueError("internal detail: /srv/secret/path")
+
+    response = env.anon.get("/leaky")
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "The request could not be processed."
+    assert "secret" not in response.text

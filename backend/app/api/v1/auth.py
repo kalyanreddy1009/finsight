@@ -1,12 +1,14 @@
 """Password authentication with rotating refresh tokens (single owner, browser client)."""
 
+import hmac
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Header, Response
+from pydantic import Field, StrictStr
 
 from app.api import auth_service
-from app.api.deps import ClockDep, Conn, DeviceId, SettingsDep, ThrottleDep
+from app.api.deps import ClientAddress, ClockDep, Conn, DeviceId, SettingsDep, ThrottleDep
 from app.api.envelope import ok
 from app.api.errors import ApiError, not_found
 from app.api.v1.schemas import DeviceRevokeIn, LoginIn, SetupIn
@@ -18,7 +20,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 REFRESH_COOKIE = "fs_refresh"
 REFRESH_PATH = "/api/v1/auth"
 CSRF_HEADER_VALUE = "finsight"
-_THROTTLE_KEY = "owner"
+
+
+class SetupWithTokenIn(SetupIn):
+    setup_token: Annotated[StrictStr, Field(min_length=1, max_length=256)]
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
@@ -50,12 +55,50 @@ async def status(conn: Conn) -> dict:
     return ok({"configured": auth_service.is_configured(conn)})
 
 
+def _locked_out() -> ApiError:
+    return ApiError(
+        429,
+        "TOO_MANY_ATTEMPTS",
+        "Too many failed attempts. Try again later.",
+        headers={"Retry-After": str(security.THROTTLE_WINDOW_SECONDS)},
+    )
+
+
+def _clear_cookie_header() -> dict[str, str]:
+    scratch = Response()
+    scratch.delete_cookie(REFRESH_COOKIE, path=REFRESH_PATH, secure=True, httponly=True, samesite="strict")
+    return {"set-cookie": scratch.headers["set-cookie"]}
+
+
+async def _check_setup_token(
+    presented: str, settings: Settings, throttle: security.LoginThrottle, address: str
+) -> None:
+    if settings.setup_token is None:
+        raise ApiError(503, "SETUP_TOKEN_NOT_CONFIGURED", "First-run setup is not enabled on this server.")
+    if throttle.is_locked(address):
+        raise _locked_out()
+    expected = settings.setup_token.get_secret_value().encode("utf-8")
+    if not hmac.compare_digest(presented.encode("utf-8"), expected):
+        throttle.record_failure(address)
+        raise ApiError(403, "INVALID_SETUP_TOKEN", "Invalid setup token.")
+
+
 @router.post("/setup", status_code=201)
 async def setup(
-    body: SetupIn, response: Response, conn: Conn, clock: ClockDep, settings: SettingsDep
+    body: SetupWithTokenIn,
+    response: Response,
+    conn: Conn,
+    clock: ClockDep,
+    settings: SettingsDep,
+    throttle: ThrottleDep,
+    address: ClientAddress,
 ) -> dict:
+    if auth_service.is_configured(conn):
+        raise ApiError(409, "ALREADY_CONFIGURED", "FinSight is already set up.")
+    await _check_setup_token(body.setup_token, settings, throttle, address)
+    password_hash = await security.hash_password_async(body.password)
     now = clock()
-    device_id, refresh = auth_service.create_owner(conn, body.password, body.device_name, now)
+    device_id, refresh = auth_service.create_owner(conn, password_hash, body.device_name, now)
     _set_refresh_cookie(response, refresh)
     return ok(_session_payload(device_id, settings, now))
 
@@ -68,18 +111,14 @@ async def login(
     clock: ClockDep,
     settings: SettingsDep,
     throttle: ThrottleDep,
+    address: ClientAddress,
 ) -> dict:
-    if throttle.is_locked(_THROTTLE_KEY):
-        raise ApiError(
-            429,
-            "TOO_MANY_ATTEMPTS",
-            "Too many failed sign-in attempts. Try again later.",
-            headers={"Retry-After": str(security.THROTTLE_WINDOW_SECONDS)},
-        )
-    if not security.verify_password(body.password, auth_service.get_password_hash(conn)):
-        throttle.record_failure(_THROTTLE_KEY)
+    if throttle.is_locked(address):
+        raise _locked_out()
+    if not await security.verify_password_async(body.password, auth_service.get_password_hash(conn)):
+        throttle.record_failure(address)
         raise ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials.")
-    throttle.reset(_THROTTLE_KEY)
+    throttle.reset(address)
     now = clock()
     device_id, refresh = auth_service.create_session(conn, body.device_name, now)
     _set_refresh_cookie(response, refresh)
@@ -98,12 +137,13 @@ async def refresh(
     if x_requested_with != CSRF_HEADER_VALUE:
         raise ApiError(403, "CSRF_CHECK_FAILED", "Missing or invalid X-Requested-With header.")
     if not fs_refresh:
-        raise auth_service.invalid_refresh()
+        raise auth_service.RefreshRejected(clear_cookie=False)
     now = clock()
     try:
         device_id, replacement = auth_service.rotate_refresh(conn, fs_refresh, now)
-    except ApiError:
-        response.delete_cookie(REFRESH_COOKIE, path=REFRESH_PATH)
+    except auth_service.RefreshRejected as rejected:
+        # The cookie is only cleared when the session is gone; never on the benign stale-token path.
+        rejected.headers = _clear_cookie_header() if rejected.clear_cookie else None
         raise
     _set_refresh_cookie(response, replacement)
     return ok(_session_payload(device_id, settings, now))

@@ -12,6 +12,7 @@ dependencies = [
     "pyjwt",
     "pymupdf",
     "uvicorn>=0.54.0",
+    "python-multipart>=0.0.33",
 ]
 
 [dependency-groups]

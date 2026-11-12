@@ -17,7 +17,7 @@ from app.finance.ledger_service import LedgerService, SplitShareSpec
 
 BASE_DAY = date(2026, 1, 1)
 TABLES = ("journal_entries", "journal_lines", "transactions", "reimbursable_splits")
-KINDS = ("opening", "expense", "income", "transfer", "refund", "settle", "reverse")
+KINDS = ("opening", "expense", "income", "transfer", "refund", "settle", "reverse", "recategorize")
 
 operations = st.lists(
     st.tuples(
@@ -46,7 +46,7 @@ class Sandbox:
             mk(conn, name="W", account_class="ASSET", account_subtype="WALLET"),
         ]
         self.expense_cats = [
-            chart.create_category(conn, name=n, category_type="EXPENSE")[0] for n in ("Food", "Rent")
+            chart.create_category(conn, name=n, category_type="EXPENSE")[0] for n in ("Food", "Rent", "Fuel")
         ]
         self.income_cat = chart.create_category(conn, name="Pay", category_type="INCOME")[0]
         self.expense_txs: list[str] = []
@@ -84,7 +84,7 @@ class Sandbox:
                 account_id=a, amount_minor=signed, entry_date=day, idempotency_key=key
             )
         if kind == "expense":
-            cat, splits = self.expense_cats[j % 2], self._splits_for(amount, flag)
+            cat, splits = self.expense_cats[j % 3], self._splits_for(amount, flag)
             return lambda: svc.record_expense(
                 source_account_id=a, category_id=cat, amount_minor=amount, tx_date=day,
                 idempotency_key=key, splits=splits,
@@ -126,18 +126,26 @@ class Sandbox:
         if kind == "reverse" and self.entry_ids:
             entry = self.entry_ids[i % len(self.entry_ids)]
             return lambda: svc.reverse_entry(journal_entry_id=entry, entry_date=day, idempotency_key=key)
+        if kind == "recategorize" and self.expense_txs:
+            target = self.expense_txs[i % len(self.expense_txs)]
+            category = self.expense_cats[amount % len(self.expense_cats)]
+            return lambda: svc.recategorize(target, category, day, key)
         return None
 
     def apply(self, idx: int, op: tuple[str, int, int, int, int]) -> None:
         call = self._calls(idx, op)
         if call is None:
             return
+        entries_before = self.conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0]
         try:
             tx_id = call()
         except ValueError:
             return  # a legitimately rejected operation must leave no trace; integrity is checked at the end
-        self.replays.append(call)
-        self.results.append(tx_id)
+        entries_after = self.conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0]
+        if entries_after > entries_before:  # a same-category recategorize is a keyless no-op, not replayable
+            self.replays.append(call)
+        if entries_after > entries_before:
+            self.results.append(tx_id)
         row = self.conn.execute(
             "SELECT t.id, t.journal_entry_id, e.entry_type FROM transactions t "
             "JOIN journal_entries e ON e.id = t.journal_entry_id WHERE t.id = ?",

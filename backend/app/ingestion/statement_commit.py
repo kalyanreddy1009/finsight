@@ -10,7 +10,11 @@ from typing import Any
 from app.database import seed
 from app.database.session import transaction
 from app.finance.ledger_service import LedgerService
-from app.ingestion.pipeline import StatementNotFoundError
+from app.ingestion.pipeline import (
+    StatementNotFoundError,
+    find_duplicate_transaction,
+    find_provisional_match,
+)
 
 _APPROVED_ROW_STATUSES = ("AUTO_APPROVED", "USER_APPROVED")
 
@@ -25,6 +29,7 @@ class CommitResult:
     committed_count: int
     skipped_count: int
     already_committed: bool
+    snapshot_written: bool = False
 
 
 def commit_statement(conn: sqlite3.Connection, statement_id: str, *, idempotency_key: str) -> CommitResult:
@@ -45,12 +50,63 @@ def commit_statement(conn: sqlite3.Connection, statement_id: str, *, idempotency
             "SELECT * FROM statement_rows WHERE statement_id = ? ORDER BY row_index", (statement_id,)
         ).fetchall()
         committed = 0
+        claimed: set[str] = set()
         for row in rows:
-            if row["row_status"] in _APPROVED_ROW_STATUSES:
-                _commit_row(conn, ledger, stmt, row)
-                committed += 1
-        _finalize(conn, stmt, committed, idempotency_key)
-        return CommitResult(statement_id, committed, len(rows) - committed, False)
+            if row["row_status"] not in _APPROVED_ROW_STATUSES:
+                continue
+            provisional_id = _recheck_row(conn, stmt, row, claimed)
+            if provisional_id is _DUPLICATE:
+                continue
+            _commit_row(conn, ledger, stmt, row, provisional_id)
+            committed += 1
+        snapshot = _finalize(conn, ledger, stmt, committed, idempotency_key)
+        return CommitResult(statement_id, committed, len(rows) - committed, False, snapshot)
+
+
+_DUPLICATE: Any = object()
+
+
+def _recheck_row(
+    conn: sqlite3.Connection, stmt: sqlite3.Row, row: sqlite3.Row, claimed: set[str]
+) -> str | None:
+    """Re-run duplicate and provisional matching against the ledger as it is right now.
+
+    Returns ``_DUPLICATE`` (after marking the row) if the row now repeats a committed
+    transaction, otherwise the provisional transaction id to upgrade, or None.
+    """
+    if not row["duplicate_override"]:
+        duplicate_of = find_duplicate_transaction(
+            conn,
+            stmt["account_id"],
+            direction=row["direction"],
+            amount_minor=row["amount_minor"],
+            external_reference=row["external_reference"],
+            dedup_fingerprint=row["dedup_fingerprint"],
+            exclude_statement_id=stmt["id"],
+        )
+        if duplicate_of is not None:
+            conn.execute(
+                "UPDATE statement_rows SET row_status = 'DUPLICATE', duplicate_of_transaction_id = ? "
+                "WHERE id = ?",
+                (duplicate_of, row["id"]),
+            )
+            return _DUPLICATE
+    provisional_id = find_provisional_match(
+        conn,
+        stmt["account_id"],
+        direction=row["direction"],
+        amount_minor=row["amount_minor"],
+        tx_date=date.fromisoformat(row["tx_date"]),
+        external_reference=row["external_reference"],
+        claimed=claimed,
+    )
+    if provisional_id is not None:
+        claimed.add(provisional_id)
+    conn.execute(
+        "UPDATE statement_rows SET provisional_match_transaction_id = ? WHERE id = ?",
+        (provisional_id, row["id"]),
+    )
+    return provisional_id
 
 
 def _require_committable(conn: sqlite3.Connection, stmt: sqlite3.Row) -> None:
@@ -86,10 +142,16 @@ def _post_opening_balance(conn: sqlite3.Connection, ledger: LedgerService, stmt:
     )
 
 
-def _commit_row(conn: sqlite3.Connection, ledger: LedgerService, stmt: sqlite3.Row, row: sqlite3.Row) -> None:
+def _commit_row(
+    conn: sqlite3.Connection,
+    ledger: LedgerService,
+    stmt: sqlite3.Row,
+    row: sqlite3.Row,
+    provisional_id: str | None,
+) -> None:
     tx_id = None
-    if row["provisional_match_transaction_id"]:
-        tx_id = _upgrade_provisional(conn, stmt, row)
+    if provisional_id:
+        tx_id = _upgrade_provisional(conn, stmt, row, provisional_id)
     if tx_id is None:
         tx_id = _post_new(ledger, stmt, row)
         conn.execute(
@@ -128,11 +190,13 @@ def _post_new(ledger: LedgerService, stmt: sqlite3.Row, row: sqlite3.Row) -> str
     return ledger.record_income(dest_account_id=stmt["account_id"], **common)
 
 
-def _upgrade_provisional(conn: sqlite3.Connection, stmt: sqlite3.Row, row: sqlite3.Row) -> str | None:
+def _upgrade_provisional(
+    conn: sqlite3.Connection, stmt: sqlite3.Row, row: sqlite3.Row, provisional_id: str
+) -> str | None:
     """Promote the matched provisional transaction in place; None if it is no longer provisional."""
     tx = conn.execute(
         "SELECT id, journal_entry_id FROM transactions WHERE id = ? AND review_status = 'PROVISIONAL'",
-        (row["provisional_match_transaction_id"],),
+        (provisional_id,),
     ).fetchone()
     if tx is None:
         return None
@@ -158,18 +222,32 @@ def _upgrade_provisional(conn: sqlite3.Connection, stmt: sqlite3.Row, row: sqlit
     return tx["id"]
 
 
-def _finalize(conn: sqlite3.Connection, stmt: sqlite3.Row, committed: int, idempotency_key: str) -> None:
+def _finalize(
+    conn: sqlite3.Connection,
+    ledger: LedgerService,
+    stmt: sqlite3.Row,
+    committed: int,
+    idempotency_key: str,
+) -> bool:
+    """Mark the statement approved; return whether a reconciled balance snapshot was written."""
     conn.execute(
         "UPDATE statements SET processing_status = 'APPROVED', "
         "approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
         (stmt["id"],),
     )
-    conn.execute(
-        "INSERT INTO account_balance_snapshots (id, account_id, snapshot_date, balance_minor, source) "
-        "VALUES (?, ?, ?, ?, 'STATEMENT_RECONCILED') ON CONFLICT (account_id, snapshot_date) "
-        "DO UPDATE SET balance_minor = excluded.balance_minor, source = excluded.source",
-        (str(uuid.uuid4()), stmt["account_id"], stmt["statement_end_date"], stmt["closing_balance_minor"]),
-    )
+    snapshot = ledger.account_balance(stmt["account_id"]) == stmt["closing_balance_minor"]
+    if snapshot:
+        conn.execute(
+            "INSERT INTO account_balance_snapshots (id, account_id, snapshot_date, balance_minor, source) "
+            "VALUES (?, ?, ?, ?, 'STATEMENT_RECONCILED') ON CONFLICT (account_id, snapshot_date) "
+            "DO UPDATE SET balance_minor = excluded.balance_minor, source = excluded.source",
+            (
+                str(uuid.uuid4()),
+                stmt["account_id"],
+                stmt["statement_end_date"],
+                stmt["closing_balance_minor"],
+            ),
+        )
     conn.execute(
         "INSERT INTO audit_events (id, event_type, target_object_type, target_object_id, metadata_json) "
         "VALUES (?, 'STATEMENT_COMMITTED', 'statement', ?, ?)",
@@ -178,3 +256,4 @@ def _finalize(conn: sqlite3.Connection, stmt: sqlite3.Row, committed: int, idemp
             json.dumps({"committed": committed, "idempotency_key": idempotency_key}, sort_keys=True),
         ),
     )  # fmt: skip
+    return snapshot

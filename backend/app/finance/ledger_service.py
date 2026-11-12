@@ -18,6 +18,14 @@ from app.database.session import transaction
 _FUNDING_CLASSES = ("ASSET", "LIABILITY")
 _NON_FUNDING_SUBTYPES = ("REIMBURSEMENT_CLEARING", "OPENING_EQUITY", "SYSTEM_CATEGORY")
 _EXPENSE_ENTRY_TYPES = ("STANDARD", "SPLIT_EXPENSE")
+MAX_AMOUNT_MINOR = 10**15
+_INT64_MAX = 2**63 - 1
+_LINE_PREFIX = "line:"
+_CONFLICT_MESSAGE = "Idempotency key reused with different arguments."
+
+
+class IdempotencyConflictError(ValueError):
+    """An idempotency key was replayed with arguments that differ from the original call."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,7 @@ class TxSpec:
     transaction_type: str
     category_id: str | None = None
     linked_transaction_id: str | None = None
+    review_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,7 +104,13 @@ def _check_amount(value: object, name: str = "amount_minor") -> int:
     _check_int(value, name)
     if value <= 0:  # type: ignore[operator]
         raise ValueError(f"{name} must be greater than zero.")
+    _check_upper_bound(value, name)  # type: ignore[arg-type]
     return value  # type: ignore[return-value]
+
+
+def _check_upper_bound(value: int, name: str) -> None:
+    if abs(value) > MAX_AMOUNT_MINOR:
+        raise ValueError(f"{name} must not exceed {MAX_AMOUNT_MINOR} minor units.")
 
 
 def _check_date(value: object, name: str) -> date:
@@ -139,6 +154,7 @@ class LedgerService:
         _check_int(amount_minor, "amount_minor")
         if amount_minor == 0:
             raise ValueError("amount_minor must be non-zero.")
+        _check_upper_bound(amount_minor, "amount_minor")
         _check_date(entry_date, "entry_date")
         meta = EntryMeta(
             statement_id, external_reference, dedup_fingerprint, description, clean_description,
@@ -165,7 +181,17 @@ class LedgerService:
                 default_description="Opening balance",
             )
 
-        return self._run(idempotency_key, build)
+        return self._run(
+            idempotency_key,
+            build,
+            {
+                "e_type": "OPENING_BALANCE",
+                "e_date": entry_date.isoformat(),
+                "account_id": account_id,
+                "amount_minor": abs(amount_minor),
+                "direction": "DEBIT" if amount_minor > 0 else "CREDIT",
+            },
+        )
 
     def record_expense(
         self,
@@ -221,7 +247,15 @@ class LedgerService:
                 after=lambda tx_id: self._insert_splits(tx_id, specs),
             )
 
-        return self._run(idempotency_key, build)
+        identity = {
+            "e_type": "SPLIT_EXPENSE" if specs else "STANDARD",
+            "e_date": tx_date.isoformat(),
+            "account_id": source_account_id,
+            "amount_minor": amount_minor,
+            "user_share_minor": amount_minor - owed,
+            **self._ledger_line_identity(category_id, amount_minor - owed),
+        }
+        return self._run(idempotency_key, build, identity)
 
     def record_income(
         self,
@@ -267,7 +301,15 @@ class LedgerService:
                 default_description="Income",
             )
 
-        return self._run(idempotency_key, build)
+        identity = {
+            "e_type": "STANDARD",
+            "e_date": tx_date.isoformat(),
+            "account_id": dest_account_id,
+            "amount_minor": amount_minor,
+            "transaction_type": "INCOME",
+            **self._ledger_line_identity(category_id, -amount_minor),
+        }
+        return self._run(idempotency_key, build, identity)
 
     def record_transfer(
         self,
@@ -315,7 +357,13 @@ class LedgerService:
                 default_description="Card payment" if is_card else "Transfer",
             )
 
-        return self._run(idempotency_key, build)
+        identity = {
+            "e_date": tx_date.isoformat(),
+            "account_id": from_account_id,
+            "counterparty_account_id": to_account_id,
+            "amount_minor": amount_minor,
+        }
+        return self._run(idempotency_key, build, identity)
 
     def record_refund(
         self,
@@ -363,7 +411,14 @@ class LedgerService:
                 default_description="Refund",
             )
 
-        return self._run(idempotency_key, build)
+        identity = {
+            "e_type": "REFUND",
+            "e_date": tx_date.isoformat(),
+            "account_id": dest_account_id,
+            "amount_minor": amount_minor,
+            "linked_transaction_id": original_transaction_id,
+        }
+        return self._run(idempotency_key, build, identity)
 
     def settle_split(
         self,
@@ -403,12 +458,25 @@ class LedgerService:
                 after=lambda tx_id: self._apply_settlement(split, amount_minor, tx_id),
             )
 
-        return self._run(idempotency_key, build)
+        identity = {
+            "e_type": "REIMBURSEMENT_SETTLEMENT",
+            "e_date": tx_date.isoformat(),
+            "account_id": bank_account_id,
+            "amount_minor": amount_minor,
+        }
+        return self._run(idempotency_key, build, identity)
 
     def reverse_entry(self, *, journal_entry_id: str, entry_date: date, idempotency_key: str) -> str:
         _check_date(entry_date, "entry_date")
+        identity = {
+            "e_type": "REVERSAL",
+            "e_date": entry_date.isoformat(),
+            "e_reverses": journal_entry_id,
+        }
         return self._run(
-            idempotency_key, lambda: self._build_reversal(journal_entry_id, entry_date, idempotency_key)
+            idempotency_key,
+            lambda: self._build_reversal(journal_entry_id, entry_date, idempotency_key),
+            identity,
         )
 
     def recategorize(
@@ -423,7 +491,12 @@ class LedgerService:
         if not isinstance(idempotency_key, str) or not idempotency_key:
             raise ValueError("idempotency_key must be a non-empty string.")
         with transaction(self.conn):
-            if self._exists("SELECT 1 FROM journal_entries WHERE idempotency_key = ?", idempotency_key):
+            adjustment = self.conn.execute(
+                "SELECT id, entry_type, entry_date FROM journal_entries WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+            if adjustment is not None:
+                self._check_adjustment_replay(adjustment, transaction_id, new_category_id, entry_date)
                 return transaction_id
             original = self._recategorizable(transaction_id)
             if original["category_id"] == new_category_id:
@@ -444,6 +517,23 @@ class LedgerService:
             )
         return transaction_id
 
+    def _check_adjustment_replay(
+        self, entry: sqlite3.Row, transaction_id: str, new_category_id: str, entry_date: date
+    ) -> None:
+        tx = self.conn.execute(
+            "SELECT transaction_type, user_share_minor FROM transactions WHERE id = ?", (transaction_id,)
+        ).fetchone()
+        if tx is None:
+            raise IdempotencyConflictError(_CONFLICT_MESSAGE)
+        new_ledger = self._category_ledger_account(new_category_id, tx["transaction_type"])
+        moved = self.conn.execute(
+            "SELECT 1 FROM journal_lines WHERE journal_entry_id = ? AND account_id = ? "
+            "AND ABS(signed_amount_minor) = ?",
+            (entry["id"], new_ledger, tx["user_share_minor"]),
+        ).fetchone()
+        if entry["entry_type"] != "STANDARD" or entry["entry_date"] != entry_date.isoformat() or not moved:
+            raise IdempotencyConflictError(_CONFLICT_MESSAGE)
+
     # ------------------------------------------------------------------- reads
 
     def account_balance(self, account_id: str) -> int:
@@ -456,10 +546,13 @@ class LedgerService:
         return int(row["bal"])
 
     def verify_integrity(self) -> IntegrityReport:
-        total = self.conn.execute(
-            "SELECT COALESCE(SUM(l.signed_amount_minor), 0) AS s FROM journal_lines l "
-            "JOIN journal_entries e ON e.id = l.journal_entry_id WHERE e.status = 'POSTED'"
-        ).fetchone()["s"]
+        # Summed per account (each bounded by the cached-balance guard) so SQLite never overflows.
+        per_account = self.conn.execute(
+            "SELECT SUM(l.signed_amount_minor) AS s FROM journal_lines l "
+            "JOIN journal_entries e ON e.id = l.journal_entry_id WHERE e.status = 'POSTED' "
+            "GROUP BY l.account_id"
+        ).fetchall()
+        total = sum(int(r["s"]) for r in per_account)
         unbalanced = self.conn.execute(
             "SELECT e.id FROM journal_entries e JOIN journal_lines l ON l.journal_entry_id = e.id "
             "WHERE e.status = 'POSTED' GROUP BY e.id HAVING SUM(l.signed_amount_minor) != 0 ORDER BY e.id"
@@ -478,18 +571,46 @@ class LedgerService:
 
     # ----------------------------------------------------------------- posting
 
-    def _run(self, idempotency_key: str, build: Callable[[], PostingPlan]) -> str:
+    def _run(
+        self, idempotency_key: str, build: Callable[[], PostingPlan], identity: dict[str, object]
+    ) -> str:
         if not isinstance(idempotency_key, str) or not idempotency_key:
             raise ValueError("idempotency_key must be a non-empty string.")
         with transaction(self.conn):
             existing = self.conn.execute(
-                "SELECT t.id FROM transactions t JOIN journal_entries e ON e.id = t.journal_entry_id "
-                "WHERE e.idempotency_key = ?",
+                "SELECT t.*, e.entry_type AS e_type, e.entry_date AS e_date, "
+                "e.reverses_journal_entry_id AS e_reverses FROM transactions t "
+                "JOIN journal_entries e ON e.id = t.journal_entry_id WHERE e.idempotency_key = ?",
                 (idempotency_key,),
             ).fetchone()
-            if existing is not None:
-                return existing["id"]
-            return self._post_entry(build())
+            if existing is None:
+                return self._post_entry(build())
+            if not self._matches_identity(existing, identity):
+                raise IdempotencyConflictError(_CONFLICT_MESSAGE)
+            return existing["id"]
+
+    def _ledger_line_identity(self, category_id: str, signed_minor: int) -> dict[str, object]:
+        """Identity entry for the category line as first posted (the tx row may be recategorized later)."""
+        row = self.conn.execute(
+            "SELECT ledger_account_id FROM categories WHERE id = ?", (category_id,)
+        ).fetchone()
+        if row is None or signed_minor == 0:
+            return {}
+        return {f"{_LINE_PREFIX}{row['ledger_account_id']}": signed_minor}
+
+    def _matches_identity(self, existing: sqlite3.Row, identity: dict[str, object]) -> bool:
+        for key, expected in identity.items():
+            if key.startswith(_LINE_PREFIX):
+                found = self.conn.execute(
+                    "SELECT 1 FROM journal_lines WHERE journal_entry_id = ? AND account_id = ? "
+                    "AND signed_amount_minor = ?",
+                    (existing["journal_entry_id"], key.removeprefix(_LINE_PREFIX), expected),
+                ).fetchone()
+                if found is None:
+                    return False
+            elif existing[key] != expected:
+                return False
+        return True
 
     def _post_entry(self, plan: PostingPlan) -> str:
         entry_id = str(uuid.uuid4())
@@ -556,6 +677,11 @@ class LedgerService:
             "VALUES (?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), entry_id, line.account_id, line.signed_amount_minor, line.memo),
         )
+        balance = self.conn.execute(
+            "SELECT current_balance_minor FROM accounts WHERE id = ?", (line.account_id,)
+        ).fetchone()["current_balance_minor"]
+        if abs(balance + line.signed_amount_minor) > _INT64_MAX:
+            raise ValueError("Account balance would exceed the supported range.")
         self.conn.execute(
             "UPDATE accounts SET current_balance_minor = current_balance_minor + ?, "
             "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
@@ -590,7 +716,7 @@ class LedgerService:
                 tx.direction,
                 tx.transaction_type,
                 tx.linked_transaction_id,
-                "PROVISIONAL" if meta.is_provisional else "USER_APPROVED",
+                tx.review_status or ("PROVISIONAL" if meta.is_provisional else "USER_APPROVED"),
             ),
         )
         return tx_id
@@ -599,10 +725,13 @@ class LedgerService:
 
     def _require_funding_account(self, account_id: str) -> sqlite3.Row:
         row = self.conn.execute(
-            "SELECT id, account_class, account_subtype FROM accounts WHERE id = ?", (account_id,)
+            "SELECT id, account_class, account_subtype, is_active FROM accounts WHERE id = ?",
+            (account_id,),
         ).fetchone()
         if row is None:
             raise ValueError("Unknown account.")
+        if not row["is_active"]:
+            raise ValueError("Account is inactive.")
         if row["account_class"] not in _FUNDING_CLASSES or row["account_subtype"] in _NON_FUNDING_SUBTYPES:
             raise ValueError("Account cannot be used for this operation.")
         return row
@@ -620,13 +749,19 @@ class LedgerService:
     def _refundable_original(self, transaction_id: str, amount_minor: int) -> sqlite3.Row:
         original = self.conn.execute(
             "SELECT t.id, t.counterparty_account_id, t.category_id, t.user_share_minor, t.review_status, "
-            "e.entry_type FROM transactions t JOIN journal_entries e ON e.id = t.journal_entry_id "
-            "WHERE t.id = ?",
+            "t.transaction_type, e.entry_type, a.account_class AS counterparty_class "
+            "FROM transactions t JOIN journal_entries e ON e.id = t.journal_entry_id "
+            "JOIN accounts a ON a.id = t.counterparty_account_id WHERE t.id = ?",
             (transaction_id,),
         ).fetchone()
         if original is None:
             raise ValueError("Unknown original transaction.")
-        if original["entry_type"] not in _EXPENSE_ENTRY_TYPES or original["review_status"] == "SUPERSEDED":
+        if (
+            original["entry_type"] not in _EXPENSE_ENTRY_TYPES
+            or original["transaction_type"] != "EXPENSE"
+            or original["counterparty_class"] != "EXPENSE"
+            or original["review_status"] == "SUPERSEDED"
+        ):
             raise ValueError("Original transaction is not a refundable expense.")
         refunded = self.conn.execute(
             "SELECT COALESCE(SUM(t.amount_minor), 0) AS s FROM transactions t "
@@ -678,17 +813,28 @@ class LedgerService:
 
     def _build_reversal(self, journal_entry_id: str, entry_date: date, idempotency_key: str) -> PostingPlan:
         original = self._reversible_entry(journal_entry_id)
-        lines = self.conn.execute(
-            "SELECT account_id, signed_amount_minor, memo FROM journal_lines "
-            "WHERE journal_entry_id = ? ORDER BY rowid",
+        rows = self.conn.execute(
+            "SELECT l.account_id, l.signed_amount_minor, l.memo, a.account_class FROM journal_lines l "
+            "JOIN accounts a ON a.id = l.account_id WHERE l.journal_entry_id = ? ORDER BY l.rowid",
             (journal_entry_id,),
         ).fetchall()
+        # Recategorization moved the user share to the transaction's current category ledger account;
+        # the reversal must credit that account, not the one the entry was first posted to.
+        current_ledger = original["counterparty_account_id"]
+        lines = tuple(
+            LineSpec(
+                current_ledger if r["account_class"] in ("EXPENSE", "INCOME") else r["account_id"],
+                -r["signed_amount_minor"],
+                r["memo"],
+            )
+            for r in rows
+        )
         flipped = "CREDIT" if original["direction"] == "DEBIT" else "DEBIT"
         return PostingPlan(
             entry_type="REVERSAL",
             entry_date=entry_date,
             idempotency_key=idempotency_key,
-            lines=tuple(LineSpec(r["account_id"], -r["signed_amount_minor"], r["memo"]) for r in lines),
+            lines=lines,
             tx=TxSpec(
                 original["account_id"],
                 original["counterparty_account_id"],
@@ -697,6 +843,7 @@ class LedgerService:
                 flipped,
                 original["transaction_type"],
                 category_id=original["category_id"],
+                review_status="SUPERSEDED",
             ),  # fmt: skip
             meta=EntryMeta(),
             default_description=f"Reversal: {original['description']}",

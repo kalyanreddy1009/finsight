@@ -1,8 +1,10 @@
+import time
+
 import pytest
 
 from app.database import seed
 from app.finance import chart
-from app.ingestion.rule_categorizer import categorize
+from app.ingestion.rule_categorizer import categorize, load_merchants
 from tests.ingestion_fakes import add_merchant
 
 
@@ -80,3 +82,28 @@ def test_seed_is_idempotent(conn):
     seed.seed_system_accounts(conn)
     count = conn.execute("SELECT COUNT(*) FROM categories WHERE is_system_category = 1").fetchone()[0]
     assert count == 2
+
+
+def test_quantified_group_alias_is_skipped(conn, food):
+    add_merchant(conn, "Evil", food, aliases=["re:(a+)+$"])
+    start = time.perf_counter()
+    assert run(conn, text="a" * 40 + "!").stage == "NONE"
+    assert time.perf_counter() - start < 1
+
+
+def test_huge_description_still_categorises_quickly(conn, food):
+    merchant = add_merchant(conn, "Big", food, aliases=[r"re:needle\d+", "bigshop"])
+    start = time.perf_counter()
+    assert run(conn, text="x" * 1_000_000 + "needle1").stage == "NONE"
+    assert run(conn, text="x" * 1_000_000 + "bigshop").merchant_id == merchant
+    assert time.perf_counter() - start < 1
+
+
+def test_preloaded_merchants_are_used_without_requery(conn, food):
+    add_merchant(conn, "Swiggy", food, aliases=["swiggy"])
+    merchants = load_merchants(conn)
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql) if "FROM merchants" in sql else None)
+    categorize(conn, clean_description="SWIGGY", extracted_vpa=None, direction="DEBIT", merchants=merchants)
+    conn.set_trace_callback(None)
+    assert queries == []

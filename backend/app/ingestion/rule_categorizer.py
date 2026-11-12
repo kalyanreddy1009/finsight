@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.database import seed
@@ -12,6 +13,8 @@ ALIAS_CONFIDENCE = 0.96
 MAX_PATTERN_LENGTH = 200
 MAX_MATCH_TEXT_LENGTH = 200
 REGEX_PREFIX = "re:"
+# A quantified group such as (a+)+ can backtrack catastrophically; such patterns are never run.
+_QUANTIFIED_GROUP = re.compile(r"\)\s*[+*{]")
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,7 @@ def _json_strings(raw: str | None) -> list[str]:
 def _alias_matches(alias: str, description: str) -> bool:
     if alias.startswith(REGEX_PREFIX):
         pattern = alias[len(REGEX_PREFIX) :]
-        if not pattern or len(pattern) > MAX_PATTERN_LENGTH:
+        if not pattern or len(pattern) > MAX_PATTERN_LENGTH or _QUANTIFIED_GROUP.search(pattern):
             return False
         try:
             compiled = re.compile(pattern, re.IGNORECASE)
@@ -71,14 +74,25 @@ def _result(
     return CategoryMatch(merchant["id"], category_id, confidence, stage)
 
 
-def categorize(
-    conn: sqlite3.Connection, *, clean_description: str, extracted_vpa: str | None, direction: str
-) -> CategoryMatch:
-    """Match a row to a merchant/category; fall back to Uncategorized with confidence 0.0."""
-    merchants = conn.execute(
+def load_merchants(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Merchants in deterministic matching order; load once and pass to ``categorize``."""
+    return conn.execute(
         "SELECT id, upi_vpa_patterns, aliases_json, default_category_id FROM merchants "
         "ORDER BY canonical_name, id"
     ).fetchall()
+
+
+def categorize(
+    conn: sqlite3.Connection,
+    *,
+    clean_description: str,
+    extracted_vpa: str | None,
+    direction: str,
+    merchants: Sequence[sqlite3.Row] | None = None,
+) -> CategoryMatch:
+    """Match a row to a merchant/category; fall back to Uncategorized with confidence 0.0."""
+    if merchants is None:
+        merchants = load_merchants(conn)
     if extracted_vpa:
         vpa = extracted_vpa.lower()
         for merchant in merchants:
