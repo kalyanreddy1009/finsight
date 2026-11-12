@@ -360,7 +360,9 @@ def test_migration_filenames_must_match_strict_pattern(tmp_path):
 # --- transaction() ----------------------------------------------------------------------------
 
 
-_INSERT_BUDGET = "INSERT INTO budgets (id, name, period_month, total_limit_minor) VALUES ('b1', 'B', '2026-01', 1)"
+_INSERT_BUDGET = (
+    "INSERT INTO budgets (id, name, period_month, total_limit_minor) VALUES ('b1', 'B', '2026-01', 1)"
+)
 
 
 def test_nested_transaction_joins_outer_and_commits_once(conn):
