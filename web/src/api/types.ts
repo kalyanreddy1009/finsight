@@ -67,7 +67,7 @@ export interface Account {
   updated_at: string;
 }
 
-// GET /accounts/categories (items)
+// GET /categories (items)
 export interface Category {
   id: string;
   name: string;

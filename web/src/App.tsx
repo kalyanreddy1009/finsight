@@ -4,7 +4,9 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { AppShell } from "./layout/AppShell";
 import { AssistantPage } from "./pages/AssistantPage";
 import { HomePage } from "./pages/HomePage";
-import { AccountsPage, PlanPage, TransactionsPage } from "./pages/PlaceholderPages";
+import { PlanPage } from "./pages/PlaceholderPages";
+import { AccountsPage } from "./pages/accounts/AccountsPage";
+import { TransactionsPage } from "./pages/transactions/TransactionsPage";
 
 export function App() {
   return (

@@ -1,0 +1,339 @@
+/* Transactions tab: filters, date-grouped rows, quick add and detail dialogs. Tokens only; rem sizes. */
+
+.tx-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: var(--content-max);
+  min-width: 0;
+}
+
+.tx-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tx-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tx-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+}
+
+.tx-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tx-toggle input {
+  width: 1.5rem;
+  height: 1.5rem;
+  accent-color: var(--accent);
+}
+
+.tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.tx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.tx-date-heading {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tx-group-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.tx-group-rows > li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.tx-row {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 100ms ease-out;
+}
+
+/* Press feedback starts on pointer-down. */
+.tx-row:active {
+  transform: scale(0.97);
+}
+
+.tx-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tx-row-title {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tx-row-meta {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.tx-row-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tx-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tx-badge {
+  padding: 0.0625rem 0.5rem;
+  border: 1px solid var(--text-secondary);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+}
+
+.tx-row--reversed .tx-row-title,
+.tx-row--reversed .row-amount {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.tx-load-more {
+  align-self: center;
+}
+
+.tx-empty-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+}
+
+.tx-select {
+  min-height: 2.75rem;
+}
+
+.tx-textarea {
+  min-height: 5.5rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.tx-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tx-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--text-secondary);
+  border-radius: 0.625rem;
+}
+
+.tx-segment {
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 100ms ease-out;
+}
+
+.tx-segment:active {
+  transform: scale(0.97);
+}
+
+.tx-segment + .tx-segment {
+  border-left: 1px solid var(--text-secondary);
+}
+
+/* Pressed state uses fill, weight and underline, not color alone. */
+.tx-segment[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: underline;
+}
+
+.tx-split {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tx-split-title {
+  padding: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.tx-split-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.tx-split-row > .field {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.tx-share {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-dialog {
+  width: min(40rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tx-dialog::backdrop {
+  background: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
+.tx-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--separator);
+}
+
+.tx-dialog-title {
+  margin: 0;
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}
+
+.tx-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.tx-details {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.tx-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--separator);
+}
+
+.tx-details dt {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--text-secondary);
+}
+
+.tx-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Below 600px the dialog becomes a full-width sheet. */
+@media (max-width: 599px) {
+  .tx-dialog {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-row,
+  .tx-segment {
+    transition: none;
+  }
+
+  .tx-row:active,
+  .tx-segment:active {
+    transform: none;
+    opacity: 0.7;
+  }
+}

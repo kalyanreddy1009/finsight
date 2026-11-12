@@ -4,6 +4,7 @@ import type { ApiEnvelope, ApiMeta, SessionData } from "./types";
 const API_BASE = "/api/v1";
 const AUTH_PATH_PREFIX = "/auth/";
 const UNAUTHORIZED = 401;
+const REFRESH_RACE_RETRY_MS = 300;
 const CSRF_HEADERS = { "X-Requested-With": "finsight" } as const;
 const NETWORK_MESSAGE = "FinSight cannot be reached. Check your connection and try again.";
 const GENERIC_MESSAGE = "Something went wrong. Try again.";
@@ -97,7 +98,10 @@ async function send(
 ): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
   const init: RequestInit = { method, credentials: "include", headers };
-  if (options.body !== undefined) {
+  if (options.body instanceof FormData) {
+    // The browser sets the multipart Content-Type with its boundary, so no header is set here.
+    init.body = options.body;
+  } else if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(options.body);
   }
@@ -114,11 +118,30 @@ async function send(
   }
 }
 
+async function refreshOnce(): Promise<void> {
+  const response = await send("POST", "/auth/refresh", { headers: { ...CSRF_HEADERS } }, null, null);
+  const { data } = await parseEnvelope<SessionData>(response);
+  accessToken = data.access_token;
+}
+
+// A refresh that raced with another tab fails with 401. Retry exactly once before signing out.
+async function refreshWithRaceRetry(): Promise<void> {
+  try {
+    await refreshOnce();
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== UNAUTHORIZED) {
+      throw error;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, REFRESH_RACE_RETRY_MS);
+    });
+    await refreshOnce();
+  }
+}
+
 async function performRefresh(): Promise<void> {
   try {
-    const response = await send("POST", "/auth/refresh", { headers: { ...CSRF_HEADERS } }, null, null);
-    const { data } = await parseEnvelope<SessionData>(response);
-    accessToken = data.access_token;
+    await refreshWithRaceRetry();
   } catch (error) {
     accessToken = null;
     signedOutListeners.forEach((listener) => listener());

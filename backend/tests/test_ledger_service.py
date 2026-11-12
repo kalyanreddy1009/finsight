@@ -871,3 +871,45 @@ def test_replay_after_recategorize_is_not_a_conflict(world: World) -> None:
             tx_date=DAY,
             idempotency_key="e",
         )
+
+
+def test_opening_balance_direction_is_statement_view_and_idempotent(world: World) -> None:
+    args = {"entry_date": DAY}
+    pos = world.svc.record_opening_balance(
+        account_id=world.bank_a, amount_minor=500, idempotency_key="op", **args
+    )
+    neg = world.svc.record_opening_balance(
+        account_id=world.card, amount_minor=-300, idempotency_key="on", **args
+    )
+    directions = {
+        r[0]: r[1]
+        for r in world.conn.execute("SELECT id, direction FROM transactions WHERE id IN (?, ?)", (pos, neg))
+    }
+    assert directions == {pos: "CREDIT", neg: "DEBIT"}
+    assert world.svc.account_balance(world.bank_a) == 500
+    assert world.svc.account_balance(world.card) == -300
+    before = counts(world.conn)
+    assert (
+        world.svc.record_opening_balance(
+            account_id=world.bank_a, amount_minor=500, idempotency_key="op", **args
+        )
+        == pos
+    )
+    assert (
+        world.svc.record_opening_balance(
+            account_id=world.card, amount_minor=-300, idempotency_key="on", **args
+        )
+        == neg
+    )
+    assert counts(world.conn) == before
+    with pytest.raises(IdempotencyConflictError):
+        world.svc.record_opening_balance(
+            account_id=world.card, amount_minor=300, idempotency_key="on", **args
+        )
+    rev = world.svc.reverse_entry(
+        journal_entry_id=entry_id(world.conn, pos), entry_date=DAY, idempotency_key="rv"
+    )
+    assert (
+        world.conn.execute("SELECT direction FROM transactions WHERE id = ?", (rev,)).fetchone()[0] == "DEBIT"
+    )
+    assert world.svc.verify_integrity().is_clean

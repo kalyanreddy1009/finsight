@@ -53,6 +53,7 @@ class EntryMeta:
     is_provisional: bool = False
 
 
+# direction is the account statement view: DEBIT = money leaving account_id, CREDIT = money entering it.
 @dataclass(frozen=True)
 class TxSpec:
     account_id: str
@@ -174,7 +175,7 @@ class LedgerService:
                     equity,
                     abs(amount_minor),
                     0,
-                    "DEBIT" if amount_minor > 0 else "CREDIT",
+                    "CREDIT" if amount_minor > 0 else "DEBIT",
                     "TRANSFER",
                 ),  # fmt: skip
                 meta=meta,
@@ -189,7 +190,7 @@ class LedgerService:
                 "e_date": entry_date.isoformat(),
                 "account_id": account_id,
                 "amount_minor": abs(amount_minor),
-                "direction": "DEBIT" if amount_minor > 0 else "CREDIT",
+                "direction": "CREDIT" if amount_minor > 0 else "DEBIT",
             },
         )
 

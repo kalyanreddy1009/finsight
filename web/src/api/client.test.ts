@@ -175,4 +175,51 @@ describe("api client", () => {
     expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(keys[1]).toBe(keys[0]);
   });
+
+  it("sends a FormData body untouched with the bearer token and no JSON Content-Type", async () => {
+    setAccessToken("token-1");
+    const form = new FormData();
+    form.append("account_id", "acc-1");
+    const fetchMock = mockFetch(() => jsonResponse(200, envelope({ ok: true })));
+
+    const result = await request<{ ok: boolean }>("POST", "/statements/upload", { body: form });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(result.data).toEqual({ ok: true });
+    expect(init?.body).toBe(form);
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(headers.Authorization).toBe("Bearer token-1");
+  });
+
+  it("retries a refresh that fails with 401 once after 300 ms before signing out", async () => {
+    vi.useFakeTimers();
+    try {
+      setAccessToken("expired");
+      const onSignedOutSpy = vi.fn();
+      unsubscribe = onSignedOut(onSignedOutSpy);
+      let refreshAttempts = 0;
+      const fetchMock = mockFetch((url, init) => {
+        if (url === "/api/v1/auth/refresh") {
+          refreshAttempts += 1;
+          return refreshAttempts === 1
+            ? jsonResponse(401, errorEnvelope("INVALID_REFRESH_TOKEN", "Refresh token is no longer valid."))
+            : jsonResponse(200, envelope({ access_token: "fresh", token_type: "Bearer" }));
+        }
+        return authHeader(init) === "Bearer fresh"
+          ? jsonResponse(200, envelope({ ok: true }))
+          : jsonResponse(401, errorEnvelope("UNAUTHORIZED", "Authentication required."));
+      });
+
+      const pending = request<{ ok: boolean }>("GET", "/dashboard/summary");
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(result.data).toEqual({ ok: true });
+      expect(callsTo(fetchMock, "/auth/refresh")).toHaveLength(2);
+      expect(onSignedOutSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
