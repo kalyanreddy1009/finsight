@@ -4,10 +4,10 @@ import { Button } from "../../components/Button";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { AccountsSection } from "./AccountsSection";
 import { AddAccountDialog } from "./AddAccountDialog";
-import { LoadError } from "./LoadError";
+import { LoadError } from "../../components/LoadError";
 import { SplitsSection } from "./SplitsSection";
 import { StatementsSection } from "./StatementsSection";
-import { useLoader } from "./useLoader";
+import { useLoader } from "../../hooks/useLoader";
 
 export function AccountsOverview() {
   useDocumentTitle("Accounts");

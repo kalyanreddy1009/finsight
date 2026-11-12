@@ -2,7 +2,7 @@ import type { UserAccountSubtype } from "../../api/types";
 import { Field } from "../../components/Field";
 import { ACCOUNT_SUBTYPES, SUBTYPE_LABELS, isCardSubtype, isLiabilitySubtype, isUserAccountSubtype } from "./accountOptions";
 import type { AccountFormErrors, AccountFormValues, AccountTextField } from "./accountForm";
-import { SelectField } from "./SelectField";
+import { SelectField } from "../../components/SelectField";
 
 interface AccountFormFieldsProps {
   values: AccountFormValues;

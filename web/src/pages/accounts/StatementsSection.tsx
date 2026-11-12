@@ -3,10 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { listStatements, type Statement, type StatementProcessingStatus } from "../../api/statements";
 import type { Account } from "../../api/types";
 import { Button } from "../../components/Button";
-import { LoadError } from "./LoadError";
+import { LoadError } from "../../components/LoadError";
 import { periodText } from "./format";
 import { UploadStatementDialog } from "./UploadStatementDialog";
-import { useLoader, type LoadState } from "./useLoader";
+import { useLoader, type LoadState } from "../../hooks/useLoader";
 
 const STATUS_LABELS: Record<StatementProcessingStatus, string> = {
   UPLOADED: "Uploaded",

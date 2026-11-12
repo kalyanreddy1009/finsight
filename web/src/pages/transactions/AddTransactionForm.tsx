@@ -4,7 +4,7 @@ import type { Account, Category } from "../../api/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { parseRupeesToMinor } from "../../lib/money";
-import { SelectField } from "./FormControls";
+import { SelectField } from "../../components/SelectField";
 import { KindSwitch } from "./KindSwitch";
 import { SplitSection } from "./SplitSection";
 import { describeError } from "./transactionErrors";
@@ -109,7 +109,7 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
             options={accountOptions}
             placeholder="Choose an account"
             error={errors.accountId}
-            onChange={(accountId) => update({ accountId })}
+            onChange={(event) => update({ accountId: event.target.value })}
           />
           <SelectField
             id="tx-add-to"
@@ -118,7 +118,7 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
             options={accountOptions}
             placeholder="Choose an account"
             error={errors.toAccountId}
-            onChange={(toAccountId) => update({ toAccountId })}
+            onChange={(event) => update({ toAccountId: event.target.value })}
           />
         </>
       ) : (
@@ -130,7 +130,7 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
             options={accountOptions}
             placeholder="Choose an account"
             error={errors.accountId}
-            onChange={(accountId) => update({ accountId })}
+            onChange={(event) => update({ accountId: event.target.value })}
           />
           <SelectField
             id="tx-add-category"
@@ -139,7 +139,7 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
             options={categoryOptions}
             placeholder="Choose a category"
             error={errors.categoryId}
-            onChange={(categoryId) => update({ categoryId })}
+            onChange={(event) => update({ categoryId: event.target.value })}
           />
         </>
       )}

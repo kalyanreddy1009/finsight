@@ -2,9 +2,9 @@ import type { Category, Transaction } from "../../api/types";
 import { formatMinor } from "../../lib/money";
 import { ReverseSection } from "./ReverseSection";
 import { TransactionEditForm } from "./TransactionEditForm";
-import { TxDialog } from "./TxDialog";
+import { Dialog } from "../../components/Dialog";
 import { formatDateHeading } from "./groupByDate";
-import { displayTitle, isMoneyIn, signedAmountText, statusLabel } from "./transactionLabels";
+import { displayTitle, isMoneyIn, isSplitExpense, signedAmountText, statusLabel } from "./transactionLabels";
 
 interface TransactionDetailDialogProps {
   transaction: Transaction | null;
@@ -23,7 +23,7 @@ export function TransactionDetailDialog({
   onReversed,
 }: TransactionDetailDialogProps) {
   return (
-    <TxDialog open={transaction !== null} title="Transaction" onClose={onClose}>
+    <Dialog open={transaction !== null} title="Transaction" onClose={onClose}>
       {transaction !== null ? (
         <TransactionDetailBody
           key={`${transaction.id}:${transaction.version}`}
@@ -33,7 +33,7 @@ export function TransactionDetailDialog({
           onReversed={onReversed}
         />
       ) : null}
-    </TxDialog>
+    </Dialog>
   );
 }
 
@@ -69,13 +69,15 @@ function TransactionFacts({ transaction }: { transaction: Transaction }) {
     ["Original description", transaction.description ?? "Not recorded"],
     ["Amount", signedAmountText(transaction)],
     ["Direction", isMoneyIn(transaction) ? "Money in" : "Money out"],
-    ["Your share", formatMinor(transaction.user_share_minor)],
     ["Account", transaction.account_name],
     ["Counterparty", transaction.counterparty_account_name],
     ["Type", transaction.transaction_type],
     ["Status", statusLabel(transaction.review_status)],
     ["Verified", transaction.is_verified ? "Yes" : "No"],
   ];
+  if (isSplitExpense(transaction)) {
+    facts.splice(5, 0, ["Your share", formatMinor(transaction.user_share_minor)]);
+  }
   return (
     <dl className="tx-details">
       {facts.map(([label, value]) => (

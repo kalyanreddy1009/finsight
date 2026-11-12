@@ -9,8 +9,10 @@ from app.ingestion.drift_guard import LayoutDriftError
 from app.ingestion.pipeline import (
     DuplicateStatementError,
     InvalidRowUpdateError,
+    RowNotFoundError,
     StatementRejectedError,
     get_review,
+    get_statement_row,
     ingest_statement,
     update_row,
 )
@@ -271,6 +273,19 @@ def _duplicate_row(conn, account, store, food, amount=25_000):
     )
     parsed = make_statement([(D, upi("111111111111", "SWIGGY", "swiggy@ybl"), amount, 0)])
     return rows_of(conn, ingest(conn, account, parsed, store).statement_id)[0]
+
+
+def test_get_statement_row_matches_review_row_shape(conn, account, store):
+    result = ingest(conn, account, make_statement([(D, "ATM", 1_000, 0)]), store)
+    review_row = rows_of(conn, result.statement_id)[0]
+    update_row(conn, review_row["id"], row_status="USER_APPROVED")
+    row = get_statement_row(conn, review_row["id"])
+    assert row == {**review_row, "row_status": "USER_APPROVED"}
+
+
+def test_get_statement_row_unknown_id_raises(conn):
+    with pytest.raises(RowNotFoundError):
+        get_statement_row(conn, "missing")
 
 
 def test_duplicate_row_can_be_overridden_but_not_rejected(conn, account, store, food):

@@ -261,6 +261,22 @@ def test_snapshot_skipped_when_a_row_was_rejected(conn, account, store):
     assert conn.execute("SELECT COUNT(*) FROM account_balance_snapshots").fetchone()[0] == 0
 
 
+def test_snapshot_written_when_later_transactions_exist(conn, account, store, food):
+    result, parsed = staged(
+        conn, account, store, [(D, "SALARY ACME", 0, 50_000)], opening=0, closing=50_000,
+    )  # fmt: skip
+    LedgerService(conn).record_expense(
+        source_account_id=account, category_id=food, amount_minor=5_000,
+        tx_date=date(2026, 4, 13), idempotency_key="later",
+    )  # fmt: skip
+    approve_pending(conn, result.statement_id)
+    out = commit_statement(conn, result.statement_id, idempotency_key="k")
+    assert out.snapshot_written is True
+    snap = conn.execute("SELECT snapshot_date, balance_minor FROM account_balance_snapshots").fetchone()
+    assert (snap["snapshot_date"], snap["balance_minor"]) == ("2026-03-31", parsed.closing_balance_minor)
+    assert LedgerService(conn).account_balance(account) == parsed.closing_balance_minor - 5_000
+
+
 def test_overridden_duplicate_survives_the_commit_recheck(conn, account, store, food):
     LedgerService(conn).record_expense(
         source_account_id=account,

@@ -4,8 +4,8 @@ import type { Account } from "../../api/types";
 import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { formatMinor } from "../../lib/money";
-import { AppDialog } from "./AppDialog";
-import { SelectField } from "./SelectField";
+import { Dialog } from "../../components/Dialog";
+import { SelectField } from "../../components/SelectField";
 import { messageFor, minorToRupeesText, todayIso } from "./format";
 import { validateRepayment, type RepaymentErrors, type RepaymentValues } from "./repaymentForm";
 
@@ -18,11 +18,11 @@ interface RepaymentDialogProps {
 
 export function RepaymentDialog({ split, bankAccounts, onClose, onSettled }: RepaymentDialogProps) {
   return (
-    <AppDialog open={split !== null} title="Record Repayment" onClose={onClose}>
+    <Dialog open={split !== null} title="Record Repayment" onClose={onClose}>
       {split !== null ? (
         <RepaymentForm split={split} bankAccounts={bankAccounts} onCancel={onClose} onSettled={onSettled} />
       ) : null}
-    </AppDialog>
+    </Dialog>
   );
 }
 

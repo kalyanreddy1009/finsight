@@ -165,7 +165,7 @@ async def update_statement_row(row_id: str, body: RowUpdateIn, conn: Conn, _: De
         raise not_found("Statement row") from None
     except pipeline.InvalidRowUpdateError as exc:
         raise ApiError(422, "VALIDATION_ERROR", str(exc)) from None
-    return ok({"id": row_id, **changes})
+    return ok(pipeline.get_statement_row(conn, row_id))
 
 
 @router.post("/{statement_id}/commit", status_code=201)

@@ -5,9 +5,9 @@ import { Button } from "../../components/Button";
 import { formatMinor } from "../../lib/money";
 import { assetAccounts } from "./accountOptions";
 import { formatIsoDate } from "./format";
-import { LoadError } from "./LoadError";
+import { LoadError } from "../../components/LoadError";
 import { RepaymentDialog } from "./RepaymentDialog";
-import { useLoader, type LoadState } from "./useLoader";
+import { useLoader, type LoadState } from "../../hooks/useLoader";
 
 // Open and partly repaid splits, newest first.
 async function loadOutstandingSplits(): Promise<Split[]> {

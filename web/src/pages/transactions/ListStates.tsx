@@ -15,17 +15,6 @@ export function ListSkeleton() {
   );
 }
 
-export function ListError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="card notice" role="alert">
-      <p>Could not load transactions. Check your connection and try again.</p>
-      <Button variant="secondary" onClick={onRetry}>
-        Try Again
-      </Button>
-    </div>
-  );
-}
-
 interface ListEmptyProps {
   filtersActive: boolean;
   onAdd: () => void;

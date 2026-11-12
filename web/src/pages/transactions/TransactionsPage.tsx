@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
+import { LoadError } from "../../components/LoadError";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../styles/transactions.css";
 import { QuickAddDialog } from "./QuickAddDialog";
@@ -47,12 +48,7 @@ export function TransactionsPage() {
         </Button>
       </header>
       {references.status === "error" ? (
-        <div className="card notice" role="alert">
-          <p>Accounts and categories could not be loaded.</p>
-          <Button variant="secondary" onClick={reloadReferences}>
-            Try Again
-          </Button>
-        </div>
+        <LoadError message="Accounts and categories could not be loaded." onRetry={reloadReferences} />
       ) : null}
       <TransactionFilters
         filters={filters}

@@ -1,7 +1,8 @@
 import type { Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
 import { groupByDate, type DateGroup } from "./groupByDate";
-import { ListEmpty, ListError, ListSkeleton } from "./ListStates";
+import { LoadError } from "../../components/LoadError";
+import { ListEmpty, ListSkeleton } from "./ListStates";
 import { TransactionRow } from "./TransactionRow";
 import type { TransactionListView } from "./useTransactionList";
 
@@ -17,7 +18,7 @@ export function TransactionList({ view, filtersActive, onSelect, onAdd }: Transa
     return <ListSkeleton />;
   }
   if (view.status === "error") {
-    return <ListError onRetry={view.reload} />;
+    return <LoadError message="Could not load transactions. Check your connection and try again." onRetry={view.reload} />;
   }
   if (view.items.length === 0) {
     return <ListEmpty filtersActive={filtersActive} onAdd={onAdd} />;

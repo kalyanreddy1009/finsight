@@ -197,7 +197,10 @@ def test_approve_and_reject_a_row(env: ApiEnv, account: str) -> None:
     row_id = review_rows(env, statement_id)[1]["id"]
     rejected = env.client.patch(f"{API}/statements/rows/{row_id}", json={"row_status": "REJECTED"})
     assert rejected.status_code == 200, rejected.text
-    assert rejected.json()["data"] == {"id": row_id, "row_status": "REJECTED"}
+    returned = rejected.json()["data"]
+    assert returned["id"] == row_id
+    assert returned["row_status"] == "REJECTED"
+    assert returned == next(r for r in review_rows(env, statement_id) if r["id"] == row_id)
     statuses = {r["id"]: r["row_status"] for r in review_rows(env, statement_id)}
     assert statuses[row_id] == "REJECTED"
     approved = env.client.patch(f"{API}/statements/rows/{row_id}", json={"row_status": "USER_APPROVED"})

@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { uploadStatement, type StatementKind } from "../../api/statements";
 import type { Account } from "../../api/types";
 import { Button } from "../../components/Button";
-import { AppDialog } from "./AppDialog";
-import { SelectField } from "./SelectField";
+import { Dialog } from "../../components/Dialog";
+import { SelectField } from "../../components/SelectField";
 import { uploadFailure, type UploadFailure } from "./uploadErrors";
 
 const CSV_KIND: StatementKind = "CSV";
@@ -19,9 +19,9 @@ interface UploadStatementDialogProps {
 
 export function UploadStatementDialog({ open, accounts, onClose, onUploaded }: UploadStatementDialogProps) {
   return (
-    <AppDialog open={open} title="Upload Statement" onClose={onClose}>
+    <Dialog open={open} title="Upload Statement" onClose={onClose}>
       {open ? <UploadForm accounts={accounts} onCancel={onClose} onUploaded={onUploaded} /> : null}
-    </AppDialog>
+    </Dialog>
   );
 }
 

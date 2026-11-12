@@ -52,3 +52,12 @@ export function badgesFor(transaction: Transaction): string[] {
       return [];
   }
 }
+
+// A split expense is one where the user's share differs from the full amount.
+export function isSplitExpense(transaction: Transaction): boolean {
+  return transaction.transaction_type === "EXPENSE" && transaction.user_share_minor !== transaction.amount_minor;
+}
+
+export function yourShareText(transaction: Transaction): string | null {
+  return isSplitExpense(transaction) ? `Your share ${formatMinor(transaction.user_share_minor)}` : null;
+}

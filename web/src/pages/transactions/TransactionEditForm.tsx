@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import { getTransaction, patchTransaction, type TransactionPatch } from "../../api/transactions";
 import type { Category, TaxSection, Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
-import { SelectField, TextareaField } from "./FormControls";
+import { SelectField } from "../../components/SelectField";
+import { categoryOptionsFor } from "../../lib/categoryOptions";
+import { TextareaField } from "./FormControls";
 import { describeError, hasErrorCode } from "./transactionErrors";
 import { TAX_SECTIONS, parseTaxSection, taxSectionLabel } from "./transactionLabels";
 
@@ -50,7 +52,7 @@ export function TransactionEditForm({ transaction, categories, onSaved }: Transa
 
   const patch = buildPatch(transaction, draft);
   const canSave = Object.keys(patch).length > 0 && !saving && !conflict;
-  const categoryOptions = categories.map((category) => ({ value: category.id, label: category.name }));
+  const categoryOptions = categoryOptionsFor(categories);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,15 +99,18 @@ export function TransactionEditForm({ transaction, categories, onSaved }: Transa
         value={draft.categoryId}
         options={categoryOptions}
         placeholder={transaction.category_id === null ? "No category" : undefined}
-        onChange={(categoryId) => setDraft((current) => ({ ...current, categoryId }))}
+        onChange={(event) => {
+          const categoryId = event.target.value;
+          setDraft((current) => ({ ...current, categoryId }));
+        }}
       />
       <SelectField
         id="tx-detail-tax"
         label="Tax section"
         value={draft.taxSection}
         options={TAX_OPTIONS}
-        onChange={(value) => {
-          const section = parseTaxSection(value);
+        onChange={(event) => {
+          const section = parseTaxSection(event.target.value);
           if (section !== null) {
             setDraft((current) => ({ ...current, taxSection: section }));
           }

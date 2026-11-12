@@ -1,6 +1,6 @@
 import type { Account, Category } from "../../api/types";
 import { AddTransactionForm } from "./AddTransactionForm";
-import { TxDialog } from "./TxDialog";
+import { Dialog } from "../../components/Dialog";
 
 interface QuickAddDialogProps {
   open: boolean;
@@ -17,12 +17,12 @@ export function QuickAddDialog({ open, accounts, categories, onClose, onAdded }:
     onAdded();
   };
   return (
-    <TxDialog open={open} title="New Transaction" onClose={onClose}>
+    <Dialog open={open} title="New Transaction" onClose={onClose}>
       <div className="tx-dialog-body">
         {open ? (
           <AddTransactionForm accounts={accounts} categories={categories} onCancel={onClose} onAdded={handleAdded} />
         ) : null}
       </div>
-    </TxDialog>
+    </Dialog>
   );
 }

@@ -1,5 +1,4 @@
 import { request } from "./client";
-import type { Category } from "./types";
 
 // Statement endpoints (backend/app/api/v1/statements.py) and GET /categories.
 // Money is integer paise.
@@ -122,10 +121,5 @@ export async function patchStatementRow(rowId: string, patch: RowPatch): Promise
 export async function commitStatement(statementId: string): Promise<CommitResult> {
   const path = `/statements/${encodeURIComponent(statementId)}/commit`;
   const { data } = await request<CommitResult>("POST", path, { idempotent: true });
-  return data;
-}
-
-export async function listCategories(): Promise<Category[]> {
-  const { data } = await request<Category[]>("GET", "/categories");
   return data;
 }

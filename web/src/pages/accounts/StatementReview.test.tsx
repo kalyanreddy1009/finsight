@@ -6,22 +6,22 @@ import { ApiError } from "../../api/client";
 import {
   commitStatement,
   getStatementReview,
-  listCategories,
   patchStatementRow,
   type Statement,
   type StatementImportError,
   type StatementReview,
   type StatementRow,
 } from "../../api/statements";
+import { listCategories } from "../../api/categories";
 import type { Category } from "../../api/types";
 import { AccountsPage } from "./AccountsPage";
 
 vi.mock("../../api/accounts", () => ({ listAccounts: vi.fn(), createAccount: vi.fn() }));
+vi.mock("../../api/categories", () => ({ listCategories: vi.fn() }));
 vi.mock("../../api/splits", () => ({ listSplits: vi.fn(), settleSplit: vi.fn() }));
 vi.mock("../../api/statements", () => ({
   listStatements: vi.fn(),
   uploadStatement: vi.fn(),
-  listCategories: vi.fn(),
   getStatementReview: vi.fn(),
   patchStatementRow: vi.fn(),
   commitStatement: vi.fn(),
@@ -229,3 +229,73 @@ describe("statement review", () => {
     expect(screen.queryByRole("button", { name: "Approve All Pending" })).toBeNull();
   });
 });
+
+const salaryCategory: Category = {
+  ...foodCategory,
+  id: "cat-salary",
+  name: "Salary",
+  category_type: "INCOME",
+  is_discretionary: false,
+  is_system_category: false,
+};
+
+describe("statement review categories and committed rows", () => {
+  it("offers only spending categories for a money-out row", async () => {
+    vi.mocked(listCategories).mockResolvedValue([foodCategory, salaryCategory]);
+    vi.mocked(getStatementReview).mockResolvedValue(reviewFixture(statementFixture(), [rowFixture({ id: "r1" })]));
+    renderReview();
+
+    const select = await screen.findByRole("combobox", { name: "Category" });
+    const names = within(select).getAllByRole("option").map((option) => option.textContent);
+    expect(names).toContain("Food & Dining");
+    expect(names).not.toContain("Salary");
+  });
+
+  it("offers only income categories for a money-in row", async () => {
+    vi.mocked(listCategories).mockResolvedValue([foodCategory, salaryCategory]);
+    vi.mocked(getStatementReview).mockResolvedValue(
+      reviewFixture(statementFixture(), [rowFixture({ id: "r2", direction: "CREDIT", clean_description: "Salary credit" })]),
+    );
+    renderReview();
+
+    const select = await screen.findByRole("combobox", { name: "Category" });
+    const names = within(select).getAllByRole("option").map((option) => option.textContent);
+    expect(names).toContain("Salary");
+    expect(names).not.toContain("Food & Dining");
+  });
+
+  it("shows committed rows as Committed with no action buttons", async () => {
+    vi.mocked(getStatementReview).mockResolvedValue(
+      reviewFixture(statementFixture(), [rowFixture({ id: "r3", row_status: "COMMITTED", clean_description: "Done row" })]),
+    );
+    renderReview();
+
+    const rowText = await screen.findByText("Committed");
+    const row = rowText.closest("li");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(within(row as HTMLElement).queryByRole("button", { name: "Reject" })).toBeNull();
+  });
+
+  it("refetches the review after commit so the rows show Committed", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getStatementReview)
+      .mockResolvedValueOnce(reviewFixture(statementFixture(), [rowFixture({ id: "r4", row_status: "USER_APPROVED" })]))
+      .mockResolvedValueOnce(reviewFixture(statementFixture({ processing_status: "APPROVED" }), [rowFixture({ id: "r4", row_status: "COMMITTED" })]));
+    vi.mocked(commitStatement).mockResolvedValue({
+      statement_id: "st-1",
+      committed_count: 1,
+      skipped_count: 0,
+      already_committed: false,
+      snapshot_written: true,
+    });
+    renderReview();
+
+    await user.click(await screen.findByRole("button", { name: "Commit Statement" }));
+
+    await waitFor(() => expect(getStatementReview).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Committed", { selector: ".status-text" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+  });
+});
+

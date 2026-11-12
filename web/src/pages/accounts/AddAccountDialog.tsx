@@ -3,7 +3,7 @@ import { createAccount } from "../../api/accounts";
 import type { UserAccountSubtype } from "../../api/types";
 import { Button } from "../../components/Button";
 import { AccountFormFields } from "./AccountFormFields";
-import { AppDialog } from "./AppDialog";
+import { Dialog } from "../../components/Dialog";
 import { EMPTY_ACCOUNT_FORM, validateAccountForm, type AccountFormErrors, type AccountFormValues, type AccountTextField } from "./accountForm";
 import { messageFor } from "./format";
 
@@ -15,9 +15,9 @@ interface AddAccountDialogProps {
 
 export function AddAccountDialog({ open, onClose, onCreated }: AddAccountDialogProps) {
   return (
-    <AppDialog open={open} title="Add Account" onClose={onClose}>
+    <Dialog open={open} title="Add Account" onClose={onClose}>
       {open ? <AddAccountForm onCancel={onClose} onCreated={onCreated} /> : null}
-    </AppDialog>
+    </Dialog>
   );
 }
 

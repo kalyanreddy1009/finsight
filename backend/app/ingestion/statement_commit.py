@@ -59,7 +59,7 @@ def commit_statement(conn: sqlite3.Connection, statement_id: str, *, idempotency
                 continue
             _commit_row(conn, ledger, stmt, row, provisional_id)
             committed += 1
-        snapshot = _finalize(conn, ledger, stmt, committed, idempotency_key)
+        snapshot = _finalize(conn, stmt, committed, idempotency_key)
         return CommitResult(statement_id, committed, len(rows) - committed, False, snapshot)
 
 
@@ -222,9 +222,19 @@ def _upgrade_provisional(
     return tx["id"]
 
 
+def _ledger_balance_as_of(conn: sqlite3.Connection, account_id: str, as_of: str) -> int:
+    """Sum of posted journal lines for the account dated on or before ``as_of`` (ISO date)."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(l.signed_amount_minor), 0) AS bal FROM journal_lines l "
+        "JOIN journal_entries e ON e.id = l.journal_entry_id "
+        "WHERE e.status = 'POSTED' AND l.account_id = ? AND e.entry_date <= ?",
+        (account_id, as_of),
+    ).fetchone()
+    return int(row["bal"])
+
+
 def _finalize(
     conn: sqlite3.Connection,
-    ledger: LedgerService,
     stmt: sqlite3.Row,
     committed: int,
     idempotency_key: str,
@@ -235,7 +245,8 @@ def _finalize(
         "approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
         (stmt["id"],),
     )
-    snapshot = ledger.account_balance(stmt["account_id"]) == stmt["closing_balance_minor"]
+    as_of_end = _ledger_balance_as_of(conn, stmt["account_id"], stmt["statement_end_date"])
+    snapshot = as_of_end == stmt["closing_balance_minor"]
     if snapshot:
         conn.execute(
             "INSERT INTO account_balance_snapshots (id, account_id, snapshot_date, balance_minor, source) "

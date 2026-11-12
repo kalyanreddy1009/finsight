@@ -386,6 +386,14 @@ def get_review(conn: sqlite3.Connection, statement_id: str) -> StatementReview:
     return StatementReview(dict(stmt), tuple(dict(r) for r in rows), tuple(dict(e) for e in errors))
 
 
+def get_statement_row(conn: sqlite3.Connection, row_id: str) -> dict[str, Any]:
+    """One staged row in the same shape ``get_review`` returns for each row."""
+    row = conn.execute("SELECT * FROM statement_rows WHERE id = ?", (row_id,)).fetchone()
+    if row is None:
+        raise RowNotFoundError("Unknown statement row.")
+    return dict(row)
+
+
 def update_row(
     conn: sqlite3.Connection,
     row_id: str,

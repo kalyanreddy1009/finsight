@@ -4,7 +4,7 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { AppShell } from "./layout/AppShell";
 import { AssistantPage } from "./pages/AssistantPage";
 import { HomePage } from "./pages/HomePage";
-import { PlanPage } from "./pages/PlaceholderPages";
+import { PlanPage } from "./pages/plan/PlanPage";
 import { AccountsPage } from "./pages/accounts/AccountsPage";
 import { TransactionsPage } from "./pages/transactions/TransactionsPage";
 

@@ -18,7 +18,9 @@ export function AccountsSection({ accounts, onAdd }: AccountsSectionProps) {
         <div className="card empty-block">
           <p className="empty-state">No accounts yet</p>
           <p className="empty-state">Add a bank, card or loan account to start tracking balances.</p>
-          <Button onClick={onAdd}>Add Account</Button>
+          <Button variant="secondary" onClick={onAdd}>
+            Add Account
+          </Button>
         </div>
       ) : (
         groupAccounts(accounts).map((group) => (

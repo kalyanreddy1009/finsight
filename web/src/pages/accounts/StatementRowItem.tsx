@@ -3,7 +3,7 @@ import type { Category } from "../../api/types";
 import { Button } from "../../components/Button";
 import { formatMinor } from "../../lib/money";
 import { formatIsoDate } from "./format";
-import { SelectField } from "./SelectField";
+import { SelectField } from "../../components/SelectField";
 import { ROW_STATUS_LABELS, rowActionsFor } from "./rowStatus";
 import type { RowActions } from "./useRowActions";
 
@@ -16,7 +16,11 @@ interface StatementRowItemProps {
 
 export function StatementRowItem({ row, categories, readOnly, actions }: StatementRowItemProps) {
   const directionLabel = row.direction === "CREDIT" ? "In" : "Out";
-  const buttons = readOnly ? [] : rowActionsFor(row.row_status);
+  const committed = row.row_status === "COMMITTED";
+  const buttons = readOnly || committed ? [] : rowActionsFor(row.row_status);
+  // DEBIT is money out, so only spending categories fit; CREDIT is money in, so only income.
+  const categoryType = row.direction === "CREDIT" ? "INCOME" : "EXPENSE";
+  const fittingCategories = categories.filter((category) => category.category_type === categoryType);
   return (
     <li className="stmt-row">
       <div className="stmt-main">
@@ -30,7 +34,7 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
           id={`row-category-${row.id}`}
           label="Category"
           value={row.suggested_category_id ?? ""}
-          disabled={readOnly}
+          disabled={readOnly || committed}
           onChange={(event) => {
             const categoryId = event.target.value;
             if (categoryId !== "") {
@@ -41,7 +45,7 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
           <option value="" disabled>
             Choose a category
           </option>
-          {categories.map((category) => (
+          {fittingCategories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>

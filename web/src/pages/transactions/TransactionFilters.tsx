@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Account, Category } from "../../api/types";
-import { SelectField } from "./FormControls";
+import { SelectField } from "../../components/SelectField";
+import { categoryOptionsFor } from "../../lib/categoryOptions";
 import type { FilterPatch, TransactionFilterValues } from "./useTransactionFilters";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -14,7 +15,7 @@ interface TransactionFiltersProps {
 
 export function TransactionFilters({ filters, accounts, categories, onChange }: TransactionFiltersProps) {
   const accountOptions = accounts.map((account) => ({ value: account.id, label: account.name }));
-  const categoryOptions = categories.map((category) => ({ value: category.id, label: category.name }));
+  const categoryOptions = categoryOptionsFor(categories);
   return (
     <form className="tx-filters" role="search" onSubmit={(event) => event.preventDefault()}>
       <SearchField value={filters.q} onChange={onChange} />
@@ -25,7 +26,7 @@ export function TransactionFilters({ filters, accounts, categories, onChange }: 
           value={filters.accountId}
           options={accountOptions}
           placeholder="All accounts"
-          onChange={(accountId) => onChange({ accountId })}
+          onChange={(event) => onChange({ accountId: event.target.value })}
         />
         <SelectField
           id="tx-filter-category"
@@ -33,7 +34,7 @@ export function TransactionFilters({ filters, accounts, categories, onChange }: 
           value={filters.categoryId}
           options={categoryOptions}
           placeholder="All categories"
-          onChange={(categoryId) => onChange({ categoryId })}
+          onChange={(event) => onChange({ categoryId: event.target.value })}
         />
       </div>
       <label className="tx-toggle" htmlFor="tx-filter-review">

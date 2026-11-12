@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom";
-import { getStatementReview, listCategories } from "../../api/statements";
+import { listCategories } from "../../api/categories";
+import { getStatementReview } from "../../api/statements";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { CommitPanel } from "./CommitPanel";
-import { LoadError } from "./LoadError";
+import { LoadError } from "../../components/LoadError";
 import { StatementRows } from "./StatementRows";
 import { StatementSummary } from "./StatementSummary";
-import { useLoader } from "./useLoader";
+import { useLoader } from "../../hooks/useLoader";
 import { useRowActions } from "./useRowActions";
 
 interface StatementReviewViewProps {
@@ -51,12 +52,7 @@ export function StatementReviewView({ statementId }: StatementReviewViewProps) {
           <CommitPanel
             statement={state.data.statement}
             rows={state.data.rows}
-            onCommitted={() =>
-              review.update((current) => ({
-                ...current,
-                statement: { ...current.statement, processing_status: "APPROVED" },
-              }))
-            }
+            onCommitted={review.reload}
           />
         </>
       ) : null}
