@@ -1,0 +1,142 @@
+/* Reset, type scale (rem, Apple scale), focus ring, and the accessibility preference answers. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-system);
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  color: var(--text);
+  background: var(--surface-grouped);
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+p,
+dl,
+dd,
+dt,
+ul {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Type scale: Large Title 34/41, Title 28/34, Title 2 22/28, Headline 17/22 semibold,
+   Subhead 15/20, Footnote 13/18. Nothing below 11px. */
+.large-title {
+  font-size: 2.125rem;
+  line-height: 2.5625rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  font-size: 1.75rem;
+  line-height: 2.125rem;
+  font-weight: 700;
+}
+
+.title2 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+}
+
+.headline {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+}
+
+.subhead {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.footnote {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--text-secondary);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* prefers-reduced-motion: no transforms; opacity cross-fades of 150ms at most. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition-property: opacity !important;
+    transition-duration: 150ms !important;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* prefers-contrast: more: 1px text-colored borders on cards and controls. */
+@media (prefers-contrast: more) {
+  .card,
+  .btn,
+  .field-input,
+  .primary-nav {
+    border-color: var(--text);
+  }
+
+  .card,
+  .btn,
+  .field-input {
+    border-width: 1px;
+    border-style: solid;
+  }
+
+  .field-input {
+    border-color: var(--text);
+  }
+}

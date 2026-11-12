@@ -1,0 +1,42 @@
+/* Design tokens. Colors are named by role; components use these names only (no raw hex).
+   src/styles/contrast.test.ts parses the hex values below and checks WCAG ratios. Keep the
+   dark overrides in the single prefers-color-scheme dark block at the end of this file. */
+
+:root {
+  color-scheme: light dark;
+
+  --surface: #FFFFFF;
+  --surface-grouped: #F2F2F7;
+  --text: #1C1C1E;
+  --text-secondary: #5A5A60;
+  --on-accent: #FFFFFF;
+  --separator: #C6C6C8;
+  --track: #E5E5EA;
+  --accent: #0B57D0;
+  --positive: #0A6B2E;
+  --negative: #B3261E;
+  --warning: #8A5300;
+
+  --gutter: 1rem;
+  --content-max: 42rem;
+  --tab-bar-height: 4rem;
+  --sidebar-width: 15rem;
+  --radius: 0.75rem;
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1C1C1E;
+    --surface-grouped: #000000;
+    --text: #F2F2F7;
+    --text-secondary: #AEAEB2;
+    --on-accent: #0A1A33;
+    --separator: #38383A;
+    --track: #3A3A3C;
+    --accent: #7FB0FF;
+    --positive: #5DD68A;
+    --negative: #FF8A80;
+    --warning: #FFC266;
+  }
+}
