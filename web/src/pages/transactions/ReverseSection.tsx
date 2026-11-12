@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { reverseTransaction } from "../../api/transactions";
 import type { Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
@@ -14,12 +14,14 @@ export function ReverseSection({ transaction, onReversed }: ReverseSectionProps)
   const [confirming, setConfirming] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const idempotencyKey = useRef(crypto.randomUUID());
 
   async function handlePost() {
     setPosting(true);
     setError(null);
     try {
-      await reverseTransaction(transaction.id);
+      await reverseTransaction(transaction.id, idempotencyKey.current);
+      idempotencyKey.current = crypto.randomUUID();
       onReversed();
     } catch (failure) {
       setPosting(false);

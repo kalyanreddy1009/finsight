@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { settleSplit, type Split } from "../../api/splits";
 import type { Account } from "../../api/types";
 import { Button } from "../../components/Button";
@@ -42,6 +42,7 @@ function RepaymentForm({ split, bankAccounts, onCancel, onSettled }: RepaymentFo
   const [errors, setErrors] = useState<RepaymentErrors>({});
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const idempotencyKey = useRef(crypto.randomUUID());
   const noBankAccount = bankAccounts.length === 0;
 
   function setField<K extends keyof RepaymentValues>(key: K, value: RepaymentValues[K]) {
@@ -59,7 +60,8 @@ function RepaymentForm({ split, bankAccounts, onCancel, onSettled }: RepaymentFo
     setSaving(true);
     setServerError(null);
     try {
-      await settleSplit(split.id, body);
+      await settleSplit(split.id, body, idempotencyKey.current);
+      idempotencyKey.current = crypto.randomUUID();
       onSettled();
     } catch (error) {
       setServerError(messageFor(error));

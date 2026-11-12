@@ -93,7 +93,7 @@ describe("QuickAddDialog", () => {
       account_id: "acc-1",
       category_id: "cat-food",
       splits: [{ counterparty_name: "Asha", owed_amount_minor: 30000 }],
-    });
+    }, expect.any(String));
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -116,7 +116,7 @@ describe("QuickAddDialog", () => {
       transaction_date: "2026-11-12",
       account_id: "acc-1",
       category_id: "cat-salary",
-    });
+    }, expect.any(String));
   });
 
   it("submits a transfer with from and to accounts and a description", async () => {
@@ -138,7 +138,7 @@ describe("QuickAddDialog", () => {
       from_account_id: "acc-1",
       to_account_id: "acc-2",
       description: "Card bill",
-    });
+    }, expect.any(String));
   });
 
   it("shows the network error inside the dialog and re-enables the button", async () => {

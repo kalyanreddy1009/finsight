@@ -8,6 +8,7 @@ import { SignInScreen } from "./SignInScreen";
 function renderSignIn(signIn: AuthContextValue["signIn"]) {
   const value: AuthContextValue = {
     status: "signedOut",
+    signOutNotice: null,
     setUp: vi.fn(),
     signIn,
     signOut: vi.fn(),

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { signOut } from "./auth";
 import { ApiError, onSignedOut, request, setAccessToken } from "./client";
 
 type FetchHandler = (url: string, init: RequestInit) => Response | Promise<Response>;
@@ -174,6 +175,68 @@ describe("api client", () => {
     const keys = attempts.map((init) => (init.headers as Record<string, string>)["Idempotency-Key"]);
     expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("refreshes then retries logout once when the access token has expired", async () => {
+    setAccessToken("expired");
+    const fetchMock = mockFetch((url, init) => {
+      if (url === "/api/v1/auth/refresh") {
+        return jsonResponse(200, envelope({ access_token: "fresh", token_type: "Bearer" }));
+      }
+      return authHeader(init) === "Bearer fresh"
+        ? jsonResponse(200, envelope({ revoked: true }))
+        : jsonResponse(401, errorEnvelope("UNAUTHORIZED", "Authentication required."));
+    });
+
+    await signOut();
+
+    expect(callsTo(fetchMock, "/auth/logout")).toHaveLength(2);
+    expect(callsTo(fetchMock, "/auth/refresh")).toHaveLength(1);
+  });
+
+  it("clears local state but rethrows when logout still fails", async () => {
+    setAccessToken("token-1");
+    mockFetch(() => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    const failure = await signOut().catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ code: "NETWORK_ERROR" });
+    const fetchMock = mockFetch(() => jsonResponse(200, envelope([])));
+    await request("GET", "/accounts");
+    expect(authHeader(fetchMock.mock.calls[0]?.[1] ?? {})).toBeNull();
+  });
+
+  it("keeps the token and does not sign out when refresh hits a network error", async () => {
+    setAccessToken("expired");
+    const onSignedOutSpy = vi.fn();
+    unsubscribe = onSignedOut(onSignedOutSpy);
+    mockFetch((url) => {
+      if (url === "/api/v1/auth/refresh") {
+        throw new TypeError("Failed to fetch");
+      }
+      return jsonResponse(401, errorEnvelope("UNAUTHORIZED", "Authentication required."));
+    });
+
+    await request("GET", "/accounts").catch((error: unknown) => error);
+    const fetchMock = mockFetch(() => jsonResponse(200, envelope([])));
+    await request("GET", "/accounts");
+
+    expect(onSignedOutSpy).not.toHaveBeenCalled();
+    expect(authHeader(fetchMock.mock.calls[0]?.[1] ?? {})).toBe("Bearer expired");
+  });
+
+  it("uses a caller-supplied idempotencyKey as is", async () => {
+    const fetchMock = mockFetch(() => jsonResponse(201, envelope({ id: "tx-1" })));
+
+    await request("POST", "/transactions", { body: {}, idempotencyKey: "key-abc" });
+    await request("POST", "/transactions", { body: {}, idempotencyKey: "key-abc" });
+
+    const keys = callsTo(fetchMock, "/transactions").map(
+      (init) => (init.headers as Record<string, string>)["Idempotency-Key"],
+    );
+    expect(keys).toEqual(["key-abc", "key-abc"]);
   });
 
   it("sends a FormData body untouched with the bearer token and no JSON Content-Type", async () => {

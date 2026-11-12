@@ -8,6 +8,7 @@ import { SetupScreen } from "./SetupScreen";
 function renderSetup(setUp: AuthContextValue["setUp"]) {
   const value: AuthContextValue = {
     status: "setup",
+    signOutNotice: null,
     setUp,
     signIn: vi.fn(),
     signOut: vi.fn(),

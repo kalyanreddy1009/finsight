@@ -2,10 +2,15 @@ import { createContext, useCallback, useEffect, useMemo, useState, type ReactNod
 import { getAuthConfigured, restoreSession, setupOwner, signIn, signOut } from "../api/auth";
 import { onSignedOut } from "../api/client";
 
+export const SIGN_OUT_FAILED_NOTICE =
+  "Signed out on this device, but the server could not be reached. Sign in and sign out again to end the session.";
+
 export type AuthStatus = "loading" | "unavailable" | "setup" | "signedOut" | "signedIn";
 
 export interface AuthContextValue {
   status: AuthStatus;
+  // Shown on the sign-in screen after a sign-out the server did not confirm.
+  signOutNotice: string | null;
   setUp: (password: string, deviceName: string, setupToken: string) => Promise<void>;
   signIn: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,6 +41,7 @@ async function bootstrap(): Promise<AuthStatus> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [attempt, setAttempt] = useState(0);
+  const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
 
   useEffect(() => onSignedOut(() => setStatus("signedOut")), []);
 
@@ -63,17 +69,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithPassword = useCallback(async (password: string) => {
     await signIn(password);
+    setSignOutNotice(null);
     setStatus("signedIn");
   }, []);
 
   const signOutOfApp = useCallback(async () => {
-    await signOut();
+    try {
+      await signOut();
+      setSignOutNotice(null);
+    } catch {
+      setSignOutNotice(SIGN_OUT_FAILED_NOTICE);
+    }
     setStatus("signedOut");
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, setUp, signIn: signInWithPassword, signOut: signOutOfApp, retry }),
-    [status, setUp, signInWithPassword, signOutOfApp, retry],
+    () => ({ status, signOutNotice, setUp, signIn: signInWithPassword, signOut: signOutOfApp, retry }),
+    [status, signOutNotice, setUp, signInWithPassword, signOutOfApp, retry],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

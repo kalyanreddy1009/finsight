@@ -23,17 +23,17 @@ export interface RowActions {
   approveAll: (rows: readonly StatementRow[]) => Promise<void>;
 }
 
-// Row PATCHes. Each success is applied to the loaded review in place, so the list does not reload.
+// Row PATCHes. Each success replaces the loaded row with the server's copy, so the list does not reload.
 export function useRowActions(update: ReviewUpdate): RowActions {
   const [progress, setProgress] = useState<ApproveProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const applyPatch = useCallback(
     async (row: StatementRow, patch: RowPatch) => {
-      await patchStatementRow(row.id, patch);
+      const updatedRow = await patchStatementRow(row.id, patch);
       update((current) => ({
         ...current,
-        rows: current.rows.map((item) => (item.id === row.id ? { ...item, ...patch } : item)),
+        rows: current.rows.map((item) => (item.id === row.id ? updatedRow : item)),
       }));
     },
     [update],

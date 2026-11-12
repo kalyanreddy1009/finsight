@@ -103,7 +103,7 @@ function renderReview() {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(listCategories).mockResolvedValue([foodCategory]);
-  vi.mocked(patchStatementRow).mockResolvedValue(undefined);
+  vi.mocked(patchStatementRow).mockImplementation(async (rowId, patch) => ({ ...rowFixture({ id: rowId }), ...patch }));
 });
 
 describe("statement review", () => {
@@ -146,6 +146,22 @@ describe("statement review", () => {
 
     await user.click(await screen.findByRole("button", { name: "Reject" }));
     expect(patchStatementRow).toHaveBeenCalledWith("r1", { row_status: "REJECTED" });
+  });
+
+  it("shows the row state from the PATCH response, not the sent patch", async () => {
+    vi.mocked(getStatementReview).mockResolvedValue(
+      reviewFixture(statementFixture(), [rowFixture({ id: "r1", row_status: "PENDING_REVIEW" })]),
+    );
+    vi.mocked(patchStatementRow).mockResolvedValueOnce(
+      rowFixture({ id: "r1", row_status: "REJECTED" }),
+    );
+    const user = userEvent.setup();
+    renderReview();
+
+    await user.click(await screen.findByRole("button", { name: "Approve" }));
+
+    expect(await screen.findByText("Rejected", { selector: ".status-text" })).toBeTruthy();
+    expect(screen.queryByText("Approved", { selector: ".status-text" })).toBeNull();
   });
 
   it("approves every pending row sequentially with Approve All Pending", async () => {
@@ -262,6 +278,19 @@ describe("statement review categories and committed rows", () => {
     const names = within(select).getAllByRole("option").map((option) => option.textContent);
     expect(names).toContain("Salary");
     expect(names).not.toContain("Food & Dining");
+  });
+
+  it("keeps a suggested category of the other type selected", async () => {
+    vi.mocked(listCategories).mockResolvedValue([foodCategory, salaryCategory]);
+    vi.mocked(getStatementReview).mockResolvedValue(
+      reviewFixture(statementFixture(), [rowFixture({ id: "r5", suggested_category_id: "cat-salary" })]),
+    );
+    renderReview();
+
+    const select = (await screen.findByRole("combobox", { name: "Category" })) as HTMLSelectElement;
+    expect(select.value).toBe("cat-salary");
+    const salaryOption = within(select).getByRole("option", { name: "Salary" }) as HTMLOptionElement;
+    expect(salaryOption.selected).toBe(true);
   });
 
   it("shows committed rows as Committed with no action buttons", async () => {

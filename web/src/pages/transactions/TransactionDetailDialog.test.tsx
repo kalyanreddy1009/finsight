@@ -85,7 +85,7 @@ describe("TransactionDetailDialog", () => {
     await user.click(screen.getByRole("button", { name: "Post Reversal" }));
 
     await waitFor(() => expect(onReversed).toHaveBeenCalledTimes(1));
-    expect(reverseTransaction).toHaveBeenCalledWith("tx-1");
+    expect(reverseTransaction).toHaveBeenCalledWith("tx-1", expect.any(String));
   });
 
   it("does not reverse when the user keeps the transaction", async () => {

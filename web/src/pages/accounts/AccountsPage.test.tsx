@@ -200,6 +200,7 @@ describe("owed to you", () => {
     expect(settleSplit).toHaveBeenCalledWith(
       "s1",
       expect.objectContaining({ bank_account_id: "a1", amount_minor: 20000 }),
+      expect.any(String),
     );
   });
 });

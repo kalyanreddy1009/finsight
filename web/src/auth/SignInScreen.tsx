@@ -8,7 +8,7 @@ import { useAuth } from "./useAuth";
 
 export function SignInScreen() {
   useDocumentTitle("Sign In");
-  const { signIn } = useAuth();
+  const { signIn, signOutNotice } = useAuth();
   const passwordId = useId();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -35,6 +35,11 @@ export function SignInScreen() {
 
   return (
     <AuthLayout title="Sign In to FinSight" intro="Enter your password to open FinSight in this browser.">
+      {signOutNotice === null ? null : (
+        <p className="field-error" role="status">
+          {signOutNotice}
+        </p>
+      )}
       <form className="form-stack" onSubmit={(event) => void handleSubmit(event)} noValidate>
         <Field
           id={passwordId}

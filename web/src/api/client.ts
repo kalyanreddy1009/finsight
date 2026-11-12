@@ -2,8 +2,10 @@ import type { ApiEnvelope, ApiMeta, SessionData } from "./types";
 
 // Paths passed to request() are relative to /api/v1, e.g. "/dashboard/summary".
 const API_BASE = "/api/v1";
-const AUTH_PATH_PREFIX = "/auth/";
+// Only these auth routes skip the 401 refresh retry. Logout needs a valid session, so it may refresh once.
+const NO_REFRESH_PATHS: readonly string[] = ["/auth/login", "/auth/setup", "/auth/refresh"];
 const UNAUTHORIZED = 401;
+const FORBIDDEN = 403;
 const REFRESH_RACE_RETRY_MS = 300;
 const CSRF_HEADERS = { "X-Requested-With": "finsight" } as const;
 const NETWORK_MESSAGE = "FinSight cannot be reached. Check your connection and try again.";
@@ -15,6 +17,8 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   idempotent?: boolean;
+  // Caller-supplied key so a user retry of the same action reuses it. Implies idempotent.
+  idempotencyKey?: string;
 }
 
 export interface ApiResult<T> {
@@ -56,8 +60,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isAuthPath(path: string): boolean {
-  return path.startsWith(AUTH_PATH_PREFIX);
+function skipsRefreshRetry(path: string): boolean {
+  return NO_REFRESH_PATHS.includes(path);
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -143,8 +147,11 @@ async function performRefresh(): Promise<void> {
   try {
     await refreshWithRaceRetry();
   } catch (error) {
-    accessToken = null;
-    signedOutListeners.forEach((listener) => listener());
+    // Only a rejected session ends it. Network and server errors leave the session as it is.
+    if (error instanceof ApiError && (error.status === UNAUTHORIZED || error.status === FORBIDDEN)) {
+      accessToken = null;
+      signedOutListeners.forEach((listener) => listener());
+    }
     throw error;
   }
 }
@@ -164,10 +171,11 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
-  const idempotencyKey = options.idempotent === true ? crypto.randomUUID() : null;
+  const idempotencyKey =
+    options.idempotencyKey ?? (options.idempotent === true ? crypto.randomUUID() : null);
   const sentWith = accessToken;
   const response = await send(method, path, options, sentWith, idempotencyKey);
-  if (response.status !== UNAUTHORIZED || isAuthPath(path)) {
+  if (response.status !== UNAUTHORIZED || skipsRefreshRetry(path)) {
     return parseEnvelope<T>(response);
   }
 

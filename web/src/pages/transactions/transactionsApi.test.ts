@@ -41,20 +41,20 @@ describe("transactions api wrappers", () => {
     });
   });
 
-  it("posts creates as idempotent", async () => {
+  it("posts creates with the caller-supplied idempotency key", async () => {
     requestMock.mockResolvedValue({ data: makeTransaction(), meta: null });
     const body = { kind: "income" as const, amount_minor: 100, transaction_date: "2026-11-12", account_id: "a", category_id: "c" };
 
-    await createTransaction(body);
+    await createTransaction(body, "key-1");
 
-    expect(requestMock).toHaveBeenCalledWith("POST", "/transactions", { body, idempotent: true });
+    expect(requestMock).toHaveBeenCalledWith("POST", "/transactions", { body, idempotencyKey: "key-1" });
   });
 
-  it("posts reversals as idempotent", async () => {
+  it("posts reversals with the caller-supplied idempotency key", async () => {
     requestMock.mockResolvedValue({ data: makeTransaction(), meta: null });
 
-    await reverseTransaction("tx-1");
+    await reverseTransaction("tx-1", "key-2");
 
-    expect(requestMock).toHaveBeenCalledWith("POST", "/transactions/tx-1/reverse", { idempotent: true });
+    expect(requestMock).toHaveBeenCalledWith("POST", "/transactions/tx-1/reverse", { idempotencyKey: "key-2" });
   });
 });

@@ -21,6 +21,12 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
   // DEBIT is money out, so only spending categories fit; CREDIT is money in, so only income.
   const categoryType = row.direction === "CREDIT" ? "INCOME" : "EXPENSE";
   const fittingCategories = categories.filter((category) => category.category_type === categoryType);
+  // A suggested category of the other type is not a fitting option, but the select must still show it.
+  const currentCategory = categories.find((category) => category.id === row.suggested_category_id);
+  const selectableCategories =
+    currentCategory !== undefined && !fittingCategories.includes(currentCategory)
+      ? [...fittingCategories, currentCategory]
+      : fittingCategories;
   return (
     <li className="stmt-row">
       <div className="stmt-main">
@@ -45,7 +51,7 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
           <option value="" disabled>
             Choose a category
           </option>
-          {fittingCategories.map((category) => (
+          {selectableCategories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createTransaction } from "../../api/transactions";
 import type { Account, Category } from "../../api/types";
 import { Button } from "../../components/Button";
@@ -30,6 +30,8 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
   const [errors, setErrors] = useState<EntryErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // One key per attempt-until-success, so a retry after a lost response cannot duplicate the entry.
+  const idempotencyKey = useRef(crypto.randomUUID());
 
   const accountOptions = accounts
     .filter((account) => account.is_active)
@@ -66,7 +68,8 @@ export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: 
     }
     setSubmitting(true);
     try {
-      await createTransaction(result.body);
+      await createTransaction(result.body, idempotencyKey.current);
+      idempotencyKey.current = crypto.randomUUID();
       onAdded();
     } catch (failure) {
       setSubmitError(describeError(failure));

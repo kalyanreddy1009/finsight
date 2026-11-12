@@ -25,11 +25,11 @@ export function restoreSession(): Promise<void> {
   return refreshSession();
 }
 
+// The local session always ends. If the server could not end it, the error is rethrown so the
+// caller can tell the user the server-side device is still active.
 export async function signOut(): Promise<void> {
   try {
     await request("POST", "/auth/logout");
-  } catch {
-    // The local session ends either way; the server-side device stays listed until revoked.
   } finally {
     setAccessToken(null);
   }

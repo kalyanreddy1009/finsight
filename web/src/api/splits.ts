@@ -40,8 +40,8 @@ export async function listSplits(status?: SplitStatus): Promise<Split[]> {
   return data;
 }
 
-export async function settleSplit(splitId: string, body: SettleBody): Promise<SettleResult> {
+export async function settleSplit(splitId: string, body: SettleBody, idempotencyKey: string): Promise<SettleResult> {
   const path = `/splits/${encodeURIComponent(splitId)}/settle`;
-  const { data } = await request<SettleResult>("POST", path, { body, idempotent: true });
+  const { data } = await request<SettleResult>("POST", path, { body, idempotencyKey });
   return data;
 }

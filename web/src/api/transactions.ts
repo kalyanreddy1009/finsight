@@ -90,8 +90,8 @@ export async function getTransaction(id: string): Promise<Transaction> {
   return data;
 }
 
-export async function createTransaction(body: NewTransactionBody): Promise<Transaction> {
-  const { data } = await request<Transaction>("POST", "/transactions", { body, idempotent: true });
+export async function createTransaction(body: NewTransactionBody, idempotencyKey: string): Promise<Transaction> {
+  const { data } = await request<Transaction>("POST", "/transactions", { body, idempotencyKey });
   return data;
 }
 
@@ -103,9 +103,9 @@ export async function patchTransaction(id: string, version: number, patch: Trans
   return data;
 }
 
-export async function reverseTransaction(id: string): Promise<Transaction> {
+export async function reverseTransaction(id: string, idempotencyKey: string): Promise<Transaction> {
   const { data } = await request<Transaction>("POST", `/transactions/${encodeURIComponent(id)}/reverse`, {
-    idempotent: true,
+    idempotencyKey,
   });
   return data;
 }

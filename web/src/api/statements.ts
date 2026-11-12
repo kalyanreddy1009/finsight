@@ -114,8 +114,9 @@ export async function getStatementReview(statementId: string): Promise<Statement
   return data;
 }
 
-export async function patchStatementRow(rowId: string, patch: RowPatch): Promise<void> {
-  await request("PATCH", `/statements/rows/${encodeURIComponent(rowId)}`, { body: patch });
+export async function patchStatementRow(rowId: string, patch: RowPatch): Promise<StatementRow> {
+  const { data } = await request<StatementRow>("PATCH", `/statements/rows/${encodeURIComponent(rowId)}`, { body: patch });
+  return data;
 }
 
 export async function commitStatement(statementId: string): Promise<CommitResult> {
