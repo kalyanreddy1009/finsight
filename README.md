@@ -90,7 +90,7 @@ export FINSIGHT_DOCS_DIR="$HOME/finsight-data/docs_store"
 
 The all-zero master key above is a placeholder. Generate a real one for any actual use.
 Keep the database and document folders outside the repository. The root `.gitignore` ignores `*.db`
-but not `docs_store/`.
+and `docs_store/` as a backstop.
 
 ### FINSIGHT_SETUP_TOKEN
 
