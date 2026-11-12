@@ -1,3 +1,5 @@
+import hashlib
+import time
 from datetime import date
 
 import pytest
@@ -173,7 +175,7 @@ def test_rows_with_no_stated_balance_are_never_flagged():
 
     # Assert
     assert result.mismatches == ()
-    assert all(candidate.balance_verified for candidate in result.candidates)
+    assert not any(candidate.balance_verified for candidate in result.candidates)
     assert result.final_computed_balance_minor == 94_000
 
 
@@ -202,16 +204,16 @@ def test_closing_balance_mismatch_is_reported():
 
 def test_same_utr_produces_same_fingerprint_regardless_of_date():
     # Arrange
-    rows = [
-        _row(0, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
-        _row(1, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000, tx_date=date(2026, 3, 15)),
-    ]
+    narration = "UPI/DR/412345678901/SHOP/shop@ybl"
+    same_day = [_row(0, narration, debit=20_000)]
+    next_day = [_row(0, narration, debit=20_000, tx_date=date(2026, 3, 15))]
 
     # Act
-    candidates = _normalize(rows).candidates
+    first = _normalize(same_day).candidates[0]
+    second = _normalize(next_day).candidates[0]
 
     # Assert
-    assert candidates[0].dedup_fingerprint == candidates[1].dedup_fingerprint
+    assert first.dedup_fingerprint == second.dedup_fingerprint
 
 
 def test_identical_non_utr_rows_on_same_day_get_different_fingerprints():
@@ -287,3 +289,74 @@ def test_bool_amount_raises_type_error():
     # Act / Assert
     with pytest.raises(TypeError, match="row_index=0"):
         _normalize(rows)
+
+
+def test_repeated_utr_rows_in_one_call_get_distinct_fingerprints():
+    # Arrange
+    rows = [
+        _row(0, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
+        _row(1, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
+        _row(2, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
+    ]
+
+    # Act
+    fingerprints = [c.dedup_fingerprint for c in _normalize(rows).candidates]
+
+    # Assert
+    assert len(set(fingerprints)) == 3
+
+
+def test_first_utr_occurrence_keeps_bare_seed_and_repeats_are_suffixed():
+    # Arrange
+    rows = [
+        _row(0, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
+        _row(1, "UPI/DR/412345678901/SHOP/shop@ybl", debit=20_000),
+    ]
+    bare_seed = f"{ACCOUNT_ID}|DEBIT|20000|UTR:412345678901"
+
+    # Act
+    fingerprints = [c.dedup_fingerprint for c in _normalize(rows).candidates]
+
+    # Assert
+    assert fingerprints[0] == hashlib.sha256(bare_seed.encode("utf-8")).hexdigest()
+    assert fingerprints[1] == hashlib.sha256(f"{bare_seed}|1".encode()).hexdigest()
+
+
+def test_rows_without_stated_balance_are_not_marked_verified():
+    # Arrange
+    rows = [_row(0, "ATM WDL 1", debit=10_000)]
+
+    # Act
+    candidate = _normalize(rows, closing=90_000).candidates[0]
+
+    # Assert
+    assert candidate.balance_verified is False
+
+
+def test_channel_extraction_ignores_text_beyond_scan_limit_but_keeps_raw_description():
+    # Arrange
+    filler = "X" * 600
+    narration = f"{filler} UPI/DR/412345678901/SHOP/shop@ybl"
+    rows = [_row(0, narration, debit=20_000)]
+
+    # Act
+    candidate = _normalize(rows).candidates[0]
+
+    # Assert
+    assert candidate.channel == "OTHER"
+    assert candidate.raw_description == narration
+
+
+def test_hostile_one_megabyte_narration_normalizes_quickly():
+    # Arrange
+    hostile = "UPI-123456789012-X-ABCD-" * (1_000_000 // len("UPI-123456789012-X-ABCD-") + 1)
+    rows = [_row(0, hostile, debit=100)]
+
+    # Act
+    started = time.perf_counter()
+    candidate = _normalize(rows).candidates[0]
+    elapsed = time.perf_counter() - started
+
+    # Assert
+    assert elapsed < 1.0
+    assert candidate.raw_description == hostile

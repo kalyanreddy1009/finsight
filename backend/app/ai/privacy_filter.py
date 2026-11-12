@@ -33,6 +33,10 @@ class ZeroTrustPrivacyGateway:
         bucketed_minor = round_half_up_to_bucket(amount_minor, cls.BUCKET_PAISE)
         return bucketed_minor // 100
 
+    @staticmethod
+    def _normalize_category_name(name: str) -> str:
+        return name.strip().casefold()
+
     @classmethod
     def build_cloud_safe_payload(
         cls,
@@ -43,15 +47,19 @@ class ZeroTrustPrivacyGateway:
     ) -> tuple[dict[str, Any], str]:
         safe_categories: dict[str, int] = {}
         redacted_sum_minor = 0
+        normalized_sensitive = {cls._normalize_category_name(name) for name in sensitive_categories}
+        normalized_redacted = cls._normalize_category_name(REDACTED_CATEGORY_NAME)
 
         for cat_name, spend_minor in category_spend_minor.items():
-            if cat_name in sensitive_categories or cat_name == REDACTED_CATEGORY_NAME:
+            normalized_name = cls._normalize_category_name(cat_name)
+            if normalized_name in normalized_sensitive or normalized_name == normalized_redacted:
                 redacted_sum_minor += spend_minor
             else:
                 safe_categories[cat_name] = cls._round_to_bucket_inr(spend_minor)
 
-        if redacted_sum_minor > 0:
-            safe_categories[REDACTED_CATEGORY_NAME] = cls._round_to_bucket_inr(redacted_sum_minor)
+        redacted_bucket_inr = cls._round_to_bucket_inr(redacted_sum_minor)
+        if redacted_bucket_inr != 0:
+            safe_categories[REDACTED_CATEGORY_NAME] = redacted_bucket_inr
 
         payload = {
             "period": year_month,

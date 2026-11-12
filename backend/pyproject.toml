@@ -11,10 +11,16 @@ dependencies = [
     "argon2-cffi",
     "pyjwt",
     "pymupdf",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
-dev = ["pytest", "hypothesis", "ruff"]
+dev = [
+    "pytest",
+    "hypothesis",
+    "ruff",
+    "httpx>=0.28.1",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

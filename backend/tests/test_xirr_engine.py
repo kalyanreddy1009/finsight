@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -107,3 +107,31 @@ def test_input_list_is_not_mutated():
 
     # Assert
     assert cashflows == snapshot
+
+
+def test_float_amount_raises_type_error():
+    cashflows = [(date(2024, 1, 1), -100_000.0), (date(2025, 1, 1), 110_000_00)]
+
+    with pytest.raises(TypeError):
+        compute_portfolio_xirr(cashflows)
+
+
+def test_bool_amount_raises_type_error():
+    cashflows = [(date(2024, 1, 1), True), (date(2025, 1, 1), 110_000_00)]
+
+    with pytest.raises(TypeError):
+        compute_portfolio_xirr(cashflows)
+
+
+def test_string_date_raises_type_error():
+    cashflows = [("2024-01-01", -100_000_00), (date(2025, 1, 1), 110_000_00)]
+
+    with pytest.raises(TypeError):
+        compute_portfolio_xirr(cashflows)
+
+
+def test_datetime_value_raises_type_error():
+    cashflows = [(datetime(2024, 1, 1), -100_000_00), (date(2025, 1, 1), 110_000_00)]
+
+    with pytest.raises(TypeError):
+        compute_portfolio_xirr(cashflows)

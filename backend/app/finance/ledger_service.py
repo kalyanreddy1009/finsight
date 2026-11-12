@@ -411,6 +411,39 @@ class LedgerService:
             idempotency_key, lambda: self._build_reversal(journal_entry_id, entry_date, idempotency_key)
         )
 
+    def recategorize(
+        self, transaction_id: str, new_category_id: str, entry_date: date, idempotency_key: str
+    ) -> str:
+        """Move the user's share of an EXPENSE/INCOME transaction to another category.
+
+        Posts a balanced STANDARD adjustment entry (no new ``transactions`` row) and repoints the
+        transaction. Returns ``transaction_id``; the same category or a replayed key is a no-op.
+        """
+        _check_date(entry_date, "entry_date")
+        if not isinstance(idempotency_key, str) or not idempotency_key:
+            raise ValueError("idempotency_key must be a non-empty string.")
+        with transaction(self.conn):
+            if self._exists("SELECT 1 FROM journal_entries WHERE idempotency_key = ?", idempotency_key):
+                return transaction_id
+            original = self._recategorizable(transaction_id)
+            if original["category_id"] == new_category_id:
+                return transaction_id
+            new_ledger = self._category_ledger_account(new_category_id, original["transaction_type"])
+            old_ledger, share = original["counterparty_account_id"], original["user_share_minor"]
+            if share > 0:
+                moved = share if original["transaction_type"] == "EXPENSE" else -share
+                lines = (
+                    LineSpec(old_ledger, -moved, "Recategorized from"),
+                    LineSpec(new_ledger, moved, "Recategorized to"),
+                )
+                self._post_adjustment(entry_date, idempotency_key, lines)
+            self.conn.execute(
+                "UPDATE transactions SET category_id = ?, counterparty_account_id = ?, "
+                "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+                (new_category_id, new_ledger, transaction_id),
+            )
+        return transaction_id
+
     # ------------------------------------------------------------------- reads
 
     def account_balance(self, account_id: str) -> int:
@@ -480,6 +513,42 @@ class LedgerService:
         if plan.after is not None:
             plan.after(tx_id)
         return tx_id
+
+    def _post_adjustment(self, entry_date: date, idempotency_key: str, lines: tuple[LineSpec, ...]) -> None:
+        entry_id = str(uuid.uuid4())
+        self.conn.execute(
+            "INSERT INTO journal_entries (id, entry_date, entry_type, idempotency_key) "
+            "VALUES (?, ?, 'STANDARD', ?)",
+            (entry_id, entry_date.isoformat(), idempotency_key),
+        )
+        for line in lines:
+            self._insert_line(entry_id, line)
+        self.conn.execute("UPDATE journal_entries SET status = 'POSTED' WHERE id = ?", (entry_id,))
+
+    def _recategorizable(self, transaction_id: str) -> sqlite3.Row:
+        row = self.conn.execute(
+            "SELECT t.id, t.category_id, t.counterparty_account_id, t.user_share_minor, t.transaction_type, "
+            "t.review_status, e.entry_type FROM transactions t "
+            "JOIN journal_entries e ON e.id = t.journal_entry_id WHERE t.id = ?",
+            (transaction_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Unknown transaction.")
+        if row["transaction_type"] not in ("EXPENSE", "INCOME") or row["entry_type"] not in (
+            "STANDARD",
+            "SPLIT_EXPENSE",
+        ):
+            raise ValueError("Only expense and income transactions can be recategorized.")
+        if row["review_status"] == "SUPERSEDED":
+            raise ValueError("A reversed transaction cannot be recategorized.")
+        if self._exists(
+            "SELECT 1 FROM transactions t JOIN journal_entries e ON e.id = t.journal_entry_id "
+            "WHERE t.linked_transaction_id = ? AND e.entry_type = 'REFUND' "
+            "AND t.review_status != 'SUPERSEDED'",
+            transaction_id,
+        ):
+            raise ValueError("Reverse the refunds of this transaction first.")
+        return row
 
     def _insert_line(self, entry_id: str, line: LineSpec) -> None:
         self.conn.execute(

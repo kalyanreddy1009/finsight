@@ -35,7 +35,10 @@ def to_minor(amount: str | Decimal | int) -> int:
         raise ValueError(f"Invalid monetary amount: {amount!r}") from exc
     if not value.is_finite():
         raise ValueError(f"Invalid monetary amount: {amount!r}")
-    minor = value * _MINOR_PER_MAJOR
+    try:
+        minor = value * _MINOR_PER_MAJOR
+    except ArithmeticError as exc:
+        raise ValueError(f"Invalid monetary amount: {amount!r}") from exc
     if minor != minor.to_integral_value():
         raise ValueError("Amount has more than 2 decimal places")
     result = int(minor)

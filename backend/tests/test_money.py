@@ -96,3 +96,8 @@ def test_to_minor_rejects_overflow(big):
 
 def test_to_minor_accepts_largest_representable_amount():
     assert to_minor("92233720368547758.07") == 2**63 - 1
+
+
+def test_to_minor_rejects_decimal_exponent_overflow_with_value_error():
+    with pytest.raises(ValueError):
+        to_minor(Decimal("1E+999999999"))

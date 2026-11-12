@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from app.database.migrate import MigrationError, apply_migrations
+from app.database.migrate import MIGRATIONS_DIR, MigrationError, apply_migrations
 from app.database.seed import (
     OPENING_EQUITY_ACCOUNT_ID,
     PENDING_REIMBURSEMENTS_ACCOUNT_ID,
@@ -41,17 +41,21 @@ def count(conn, table):
     return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
 
+def _shipped_versions() -> list[str]:
+    return sorted(p.stem for p in MIGRATIONS_DIR.glob("*.sql"))
+
+
 def test_apply_migrations_is_idempotent(conn):
     second = apply_migrations(conn)
-    versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
+    versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
     assert second == []
-    assert versions == ["0001_initial"]
+    assert versions == _shipped_versions()
 
 
 def test_first_migration_run_reports_applied_versions(tmp_path):
     c = connect(tmp_path / "x.db")
     try:
-        assert apply_migrations(c) == ["0001_initial"]
+        assert apply_migrations(c) == _shipped_versions()
     finally:
         c.close()
 
@@ -387,3 +391,26 @@ def test_transaction_leaves_no_open_transaction_after_failure(conn):
     with pytest.raises(RuntimeError), transaction(conn):
         raise RuntimeError("boom")
     assert not conn.in_transaction
+
+
+def test_inner_failure_caught_by_caller_undoes_only_inner_writes(conn):
+    with transaction(conn):
+        try:
+            with transaction(conn):
+                conn.execute(_INSERT_BUDGET)
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+        conn.execute(
+            "INSERT INTO budgets (id, name, period_month, total_limit_minor) VALUES ('b2', 'C', '2026-02', 1)"
+        )
+    assert [r[0] for r in conn.execute("SELECT id FROM budgets")] == ["b2"]
+
+
+def test_inner_success_then_outer_failure_persists_nothing(conn):
+    with pytest.raises(RuntimeError), transaction(conn):
+        with transaction(conn):
+            conn.execute(_INSERT_BUDGET)
+        raise RuntimeError("outer boom")
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM budgets").fetchone()[0] == 0

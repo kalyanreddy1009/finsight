@@ -1,7 +1,7 @@
 """Portfolio XIRR engine: Newton-Raphson with a bisection fallback over dated cashflows."""
 
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 
 _DAYS_PER_YEAR = 365.0
 _INITIAL_RATE = 0.12  # Initial guess: 12% p.a.
@@ -70,6 +70,14 @@ def _bisection(npv_at: Callable[[float], float], lower: float, upper: float) -> 
     return (lower + upper) / 2.0
 
 
+def _validate_cashflows(cashflows: list[tuple[date, int]]) -> None:
+    for day, amount in cashflows:
+        if isinstance(day, datetime) or not isinstance(day, date):
+            raise TypeError("cashflow dates must be datetime.date")
+        if isinstance(amount, bool) or not isinstance(amount, int):
+            raise TypeError("cashflow amounts must be int minor units")
+
+
 def compute_portfolio_xirr(cashflows: list[tuple[date, int]], max_iterations: int = 100) -> float | None:
     """
     Computes the annualized Internal Rate of Return (XIRR) as a percent, rounded to 2 dp,
@@ -80,6 +88,7 @@ def compute_portfolio_xirr(cashflows: list[tuple[date, int]], max_iterations: in
     both a positive and a negative value, or when no root exists in the rate interval.
     The input list is not modified.
     """
+    _validate_cashflows(cashflows)
     if len(cashflows) < 2:
         return None
     amounts_minor = [amount for _, amount in cashflows]

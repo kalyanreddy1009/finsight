@@ -1,6 +1,7 @@
 """SQLite/SQLCipher connection helpers."""
 
 import sqlite3
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -51,14 +52,34 @@ def connect(db_path: str | Path, key: str | None = None) -> sqlite3.Connection:
 
 
 @contextmanager
+def _savepoint(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """Nested block inside an open transaction: RELEASE on success, ROLLBACK TO on any exception."""
+    name = f"sp_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield conn
+    except BaseException:
+        # A failed rollback must never mask the original exception.
+        with suppress(sqlite3.Error):
+            conn.execute(f"ROLLBACK TO {name}")
+        with suppress(sqlite3.Error):
+            conn.execute(f"RELEASE {name}")
+        raise
+    conn.execute(f"RELEASE {name}")
+
+
+@contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """BEGIN IMMEDIATE ... COMMIT, rolling back on any exception.
 
-    If a transaction is already open on this connection, the block joins it: nothing is committed
-    or rolled back here, and an exception propagates so the outermost block rolls everything back.
+    If a transaction is already open on this connection, the block runs under a savepoint: its
+    writes are released on success, or undone on any exception. The exception still propagates,
+    and the outermost block decides whether anything is committed. A caller that catches the
+    exception outside the inner block keeps the outer transaction's other writes.
     """
     if conn.in_transaction:
-        yield conn
+        with _savepoint(conn):
+            yield conn
         return
     conn.execute("BEGIN IMMEDIATE")
     try:

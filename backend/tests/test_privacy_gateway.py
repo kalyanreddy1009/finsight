@@ -171,3 +171,54 @@ def test_response_schema_accepts_headline_of_exactly_160_chars():
     )
 
     assert len(schema.summary_headline) == 160
+
+
+@pytest.mark.parametrize("sensitive_name", ["Health", "health ", " HEALTH"])
+def test_sensitive_match_ignores_case_and_surrounding_whitespace(sensitive_name):
+    # Arrange
+    spend = {"health ": 7_000_00, "Food": 1_000_00}
+
+    # Act
+    payload, _ = ZeroTrustPrivacyGateway.build_cloud_safe_payload(
+        "2026-10", 50_000_00, spend, {sensitive_name}
+    )
+    serialized = json.dumps(payload)
+
+    # Assert
+    assert payload["category_expenses_inr"] == {"Food": 1_000, "Redacted_Private": 7_000}
+    assert "health" not in serialized.lower()
+
+
+def test_reserved_name_check_ignores_case_and_whitespace():
+    # Arrange
+    spend = {" redacted_PRIVATE ": 5_000_00}
+
+    # Act
+    payload, _ = ZeroTrustPrivacyGateway.build_cloud_safe_payload("2026-10", 0, spend, set())
+
+    # Assert
+    assert payload["category_expenses_inr"] == {"Redacted_Private": 5_000}
+    assert "redacted_PRIVATE" not in json.dumps(payload)
+
+
+def test_redacted_bucket_omitted_when_sensitive_total_rounds_to_zero():
+    # Arrange
+    spend = {"Therapy": 200_00, "Food": 4_000_00}
+
+    # Act
+    payload, _ = ZeroTrustPrivacyGateway.build_cloud_safe_payload("2026-10", 50_000_00, spend, {"Therapy"})
+
+    # Assert
+    assert payload["category_expenses_inr"] == {"Food": 4_000}
+    assert "Redacted_Private" not in json.dumps(payload)
+
+
+def test_non_sensitive_category_rounding_to_zero_stays_in_payload():
+    # Arrange
+    spend = {"Snacks": 100_00}
+
+    # Act
+    payload, _ = ZeroTrustPrivacyGateway.build_cloud_safe_payload("2026-10", 0, spend, set())
+
+    # Assert
+    assert payload["category_expenses_inr"] == {"Snacks": 0}

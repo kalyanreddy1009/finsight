@@ -11,6 +11,8 @@ from datetime import date
 
 CLEAN_DESCRIPTION_KEY_LENGTH = 24
 FALLBACK_DESCRIPTION_LENGTH = 32
+# Channel regexes run on this prefix only; bounds the cost of hostile narrations.
+CHANNEL_SCAN_MAX_CHARS = 512
 
 
 @dataclass(frozen=True)
@@ -119,7 +121,8 @@ class IndianBankingNormalizer:
             running_balance, mismatch = _apply_running_balance(running_balance, row)
             if mismatch is not None:
                 mismatches.append(mismatch)
-            candidates.append(cls._build_candidate(account_id, row, mismatch is None, base_seed_counts))
+            verified = row.stated_running_balance_minor is not None and mismatch is None
+            candidates.append(cls._build_candidate(account_id, row, verified, base_seed_counts))
 
         return NormalizationResult(
             candidates=tuple(candidates),
@@ -158,17 +161,21 @@ class IndianBankingNormalizer:
 
     @classmethod
     def _extract_channel(cls, collapsed: str) -> tuple[str, str | None, str | None, str]:
-        """Returns (channel, vpa, utr, merchant_raw) for a whitespace-collapsed narration."""
+        """Returns (channel, vpa, utr, merchant_raw) for a whitespace-collapsed narration.
+
+        Matching runs on a bounded prefix so hostile input cannot make the regexes slow.
+        """
+        scan = collapsed[:CHANNEL_SCAN_MAX_CHARS]
         for upi_re in cls.UPI_PATTERNS:
-            m = upi_re.search(collapsed)
+            m = upi_re.search(scan)
             if m:
                 return "UPI", m.group("vpa").lower(), m.group("utr"), m.group("merchant")
 
-        m_imps = cls.IMPS_PATTERN.search(collapsed)
+        m_imps = cls.IMPS_PATTERN.search(scan)
         if m_imps:
             return "IMPS", None, m_imps.group("utr"), m_imps.group("merchant")
 
-        m_neft = cls.NEFT_PATTERN.search(collapsed)
+        m_neft = cls.NEFT_PATTERN.search(scan)
         if m_neft:
             return m_neft.group("channel").upper(), None, m_neft.group("utr"), m_neft.group("merchant")
 
@@ -198,11 +205,13 @@ class IndianBankingNormalizer:
 
     @staticmethod
     def _dedup_fingerprint(base_seed: str, utr: str | None, base_seed_counts: Counter[str]) -> str:
-        if utr:
+        # Rows can share a base seed (identical non-UTR purchases on one day, or a repeated UTR).
+        # The occurrence index keeps their fingerprints distinct while staying deterministic per
+        # call. The first UTR occurrence keeps the bare seed.
+        occurrence = base_seed_counts[base_seed]
+        base_seed_counts[base_seed] += 1
+        if utr and occurrence == 0:
             seed = base_seed
         else:
-            # Genuinely separate identical purchases on one day share a base seed; the occurrence
-            # index keeps their fingerprints distinct while staying deterministic per call.
-            seed = f"{base_seed}|{base_seed_counts[base_seed]}"
-            base_seed_counts[base_seed] += 1
+            seed = f"{base_seed}|{occurrence}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()
