@@ -134,3 +134,69 @@ class SettleIn(Body):
     amount_minor: Minor
     transaction_date: IsoDate | None = None
     description: Text | None = None
+
+
+# ------------------------------------------------------- plan: budgets, goals, recurring
+
+Name = Annotated[StrictStr, Field(min_length=1, max_length=100)]
+Frequency = Literal["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]
+GoalStatus = Literal["ACTIVE", "PAUSED", "COMPLETED"]
+Priority = Annotated[StrictInt, Field(ge=1, le=99)]
+AlertPct = Annotated[StrictInt, Field(ge=1, le=100)]
+Amount0 = Annotated[StrictInt, Field(ge=0, le=10**13)]
+
+
+class BudgetCategoryIn(Body):
+    category_id: Id
+    limit_minor: Minor
+    alert_threshold_pct: AlertPct = 80
+
+
+class BudgetIn(Body):
+    name: Name = "Monthly Budget"
+    total_limit_minor: Minor
+    categories: Annotated[list[BudgetCategoryIn], Field(max_length=50)] = []
+
+
+class GoalIn(Body):
+    name: Name
+    target_amount_minor: Minor
+    current_locked_amount_minor: Amount0 = 0
+    monthly_contribution_minor: Amount0 = 0
+    target_date: IsoDate | None = None
+    priority: Priority = 1
+    linked_account_id: Id | None = None
+
+
+class GoalPatchIn(Body):
+    """Only fields present in the body change. The router rejects nulls on non-nullable fields."""
+
+    name: Name | None = None
+    target_amount_minor: Minor | None = None
+    current_locked_amount_minor: Amount0 | None = None
+    monthly_contribution_minor: Amount0 | None = None
+    target_date: IsoDate | None = None
+    priority: Priority | None = None
+    linked_account_id: Id | None = None
+    status: GoalStatus | None = None
+
+
+class RecurringIn(Body):
+    merchant_name: Name
+    category_id: Id
+    account_id: Id | None = None
+    expected_amount_minor: Minor
+    frequency: Frequency
+    next_expected_date: IsoDate
+    is_mandatory: StrictBool = True
+
+
+class RecurringPatchIn(Body):
+    """Only fields present in the body are changed; the router rejects explicit nulls."""
+
+    expected_amount_minor: Minor | None = None
+    frequency: Frequency | None = None
+    next_expected_date: IsoDate | None = None
+    is_mandatory: StrictBool | None = None
+    is_active: StrictBool | None = None
+    category_id: Id | None = None

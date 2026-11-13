@@ -697,8 +697,11 @@ class LedgerService:
             "INSERT INTO transactions (id, journal_entry_id, account_id, counterparty_account_id, "
             "statement_id, merchant_id, category_id, transaction_date, description, clean_description, "
             "external_reference, dedup_fingerprint, amount_minor, user_share_minor, direction, "
-            "transaction_type, linked_transaction_id, review_status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "transaction_type, linked_transaction_id, review_status, tax_section) "
+            # A new expense starts with its category's default tax section; the owner can change it later.
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+            "CASE WHEN ? = 'EXPENSE' THEN COALESCE("
+            "(SELECT default_tax_section FROM categories WHERE id = ?), 'NONE') ELSE 'NONE' END)",
             (
                 tx_id,
                 entry_id,
@@ -718,6 +721,8 @@ class LedgerService:
                 tx.transaction_type,
                 tx.linked_transaction_id,
                 tx.review_status or ("PROVISIONAL" if meta.is_provisional else "USER_APPROVED"),
+                tx.transaction_type,
+                tx.category_id,
             ),
         )
         return tx_id

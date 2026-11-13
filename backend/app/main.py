@@ -12,7 +12,7 @@ from app.database.migrate import apply_migrations
 from app.database.seed import seed_system_accounts
 from app.database.session import connect
 
-_CORS_METHODS = ["GET", "POST", "PATCH", "OPTIONS"]
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _CORS_HEADERS = ["Authorization", "Content-Type", "Idempotency-Key", "If-Match", "X-Requested-With"]
 
 
