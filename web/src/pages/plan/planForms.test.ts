@@ -134,7 +134,7 @@ describe("bill form", () => {
 });
 
 describe("goal form", () => {
-  const values = { name: " Car ", target: "5,00,000", locked: "", monthly: "10000", targetDate: "", status: "ACTIVE" as const };
+  const values = { name: " Car ", target: "5,00,000", locked: "", monthly: "10000", targetDate: "", priority: "1", status: "ACTIVE" as const };
 
   it("treats blank amounts as zero and omits the target date from the POST body", () => {
     const result = validateGoalForm(values);
@@ -144,6 +144,7 @@ describe("goal form", () => {
       target_amount_minor: 50000000,
       current_locked_amount_minor: 0,
       monthly_contribution_minor: 1000000,
+      priority: 1,
     });
   });
 

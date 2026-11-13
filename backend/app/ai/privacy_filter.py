@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
@@ -11,11 +11,20 @@ from app.core.money import round_half_up_to_bucket
 REDACTED_CATEGORY_NAME = "Redacted_Private"
 
 
+DEFAULT_DISCLAIMER = "Advisory insight only; verified against local deterministic ledger."
+HEADLINE_MAX_CHARS = 160
+ITEM_MAX_CHARS = 300
+MAX_OBSERVATIONS = 5
+MAX_ACTIONS = 4
+
+InsightLine = Annotated[str, Field(max_length=ITEM_MAX_CHARS)]
+
+
 class AIInsightResponseSchema(BaseModel):
-    summary_headline: str = Field(..., max_length=160)
-    key_observations: list[str] = Field(..., max_length=5)
-    recommended_actions: list[str] = Field(..., max_length=4)
-    disclaimer: str = Field(default="Advisory insight only; verified against local deterministic ledger.")
+    summary_headline: str = Field(..., max_length=HEADLINE_MAX_CHARS)
+    key_observations: list[InsightLine] = Field(..., max_length=MAX_OBSERVATIONS)
+    recommended_actions: list[InsightLine] = Field(..., max_length=MAX_ACTIONS)
+    disclaimer: str = Field(default=DEFAULT_DISCLAIMER)
 
 
 class ZeroTrustPrivacyGateway:

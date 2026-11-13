@@ -1,48 +1,29 @@
-/* Plan tab: category groups. Sizes are rem; colors come from tokens. */
+/* Plan tab: category groups, budget, bills and goals. Sizes are rem; colors come from tokens.
+   Section cards are the shared glass recipe (base.css); section labels are the shared eyebrow. */
 
 .plan-page {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--section-gap);
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 
-.plan-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+/* A header that holds a labelled field (the tax year selector) aligns to the bottom, so the eyebrow
+   shares a baseline with the select. The label itself does not need the header-height minimum. */
+.plan-section-header:has(.field) {
+  align-items: end;
 }
 
-.plan-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.plan-section-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.plan-section-title {
-  margin: 0;
-  font-size: 1.375rem;
-  line-height: 1.75rem;
-  font-weight: 600;
+.plan-section-header:has(.field) > * {
+  min-height: 0;
 }
 
 .plan-group {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-2);
 }
 
 .plan-group-title {
@@ -57,18 +38,11 @@
   min-height: 2.75rem;
 }
 
-.plan-page :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Budget, bills and goals: progress bars, status words, row actions and fieldsets. */
-
 .plan-month-nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .plan-month-name {
@@ -81,13 +55,14 @@
   margin: 0;
   font-size: 1.0625rem;
   line-height: 1.375rem;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .plan-progress {
   width: 100%;
-  height: 0.5rem;
+  height: 0.625rem;
   overflow: hidden;
   border-radius: 999px;
   background: var(--track);
@@ -109,12 +84,13 @@
 
 .plan-tag {
   align-self: flex-start;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--separator);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--accent-border);
   border-radius: 999px;
+  background: var(--accent-soft);
   font-size: 0.8125rem;
   line-height: 1rem;
-  color: var(--text-secondary);
+  color: var(--text);
 }
 
 .plan-item-row {
@@ -126,13 +102,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .plan-confirm {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .plan-danger {
@@ -142,16 +118,17 @@
 .plan-fieldset {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-width: 0;
   margin: 0;
-  padding: 0.75rem;
-  border: 1px solid var(--separator);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--well);
 }
 
 .plan-fieldset legend {
-  padding: 0 0.25rem;
+  padding: 0 var(--space-1);
   font-weight: 600;
 }
 

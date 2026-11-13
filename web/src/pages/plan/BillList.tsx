@@ -6,6 +6,7 @@ import { frequencyLabel, formatPlanDate } from "./planFormat";
 import { groupBills } from "./billForm";
 
 export interface BillListActions {
+  onEdit: (rule: RecurringRule) => void;
   onMarkPaid: (rule: RecurringRule) => void;
   onToggleActive: (rule: RecurringRule) => void;
   onAskDelete: (rule: RecurringRule) => void;
@@ -75,6 +76,9 @@ function BillRow({ rule, busyId, confirmId, actions }: BillRowProps) {
         <div className="plan-row-actions">
           <Button variant="secondary" onClick={() => actions.onMarkPaid(rule)} disabled={busy}>
             Mark Paid
+          </Button>
+          <Button variant="plain" onClick={() => actions.onEdit(rule)} disabled={busy}>
+            Edit
           </Button>
           <Button variant="plain" onClick={() => actions.onToggleActive(rule)} disabled={busy}>
             {rule.is_active ? "Pause" : "Resume"}

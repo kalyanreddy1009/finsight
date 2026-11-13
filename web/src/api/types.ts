@@ -144,3 +144,76 @@ export interface DashboardSummary {
   upcoming_bills: UpcomingBill[];
   pending_review_count: number;
 }
+
+// GET /insights/summary
+export interface CategoryInsight {
+  category_id: string | null;
+  name: string;
+  spent_minor: number;
+  previous_minor: number;
+  // Share of this month's spending in basis points (100 bp = 1%).
+  share_bp: number;
+}
+
+export interface TrendPoint {
+  // "YYYY-MM", oldest first.
+  year_month: string;
+  income_minor: number;
+  expense_minor: number;
+}
+
+export interface InsightHighlight {
+  kind: string;
+  severity: "info" | "warning";
+  title: string;
+  detail: string;
+}
+
+export interface InsightsSummary {
+  as_of: string;
+  month: string;
+  income_minor: number;
+  expense_minor: number;
+  net_minor: number;
+  previous_expense_minor: number;
+  categories: CategoryInsight[];
+  trend: TrendPoint[];
+  highlights: InsightHighlight[];
+}
+
+// GET /ai/status
+export interface AiStatus {
+  provider: string;
+  reachable: boolean;
+  model: string;
+  model_available: boolean;
+  installed_models: string[];
+  local_only: boolean;
+}
+
+// POST /ai/chat
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatReply {
+  answer: string;
+  model: string;
+  latency_ms: number;
+  facts: unknown;
+}
+
+// POST /ai/insight
+export interface AiInsight {
+  summary_headline: string;
+  key_observations: string[];
+  recommended_actions: string[];
+  disclaimer: string;
+}
+
+export interface AiInsightReply {
+  insight: AiInsight;
+  model: string;
+  latency_ms: number;
+}

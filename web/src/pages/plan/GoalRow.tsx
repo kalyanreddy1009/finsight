@@ -32,6 +32,7 @@ export function GoalRow({ goal, busy, confirming, onEdit, onAskDelete, onCancelD
           label={`${goal.name} set aside`}
           percent={usedPercent(goal.current_locked_amount_minor, goal.target_amount_minor)}
         />
+        <span className="secondary-text">Priority {goal.priority}</span>
         {goal.target_date ? <span className="secondary-text">Target {formatPlanDate(goal.target_date)}</span> : null}
         {goal.status === "ACTIVE" ? null : <span className="plan-tag">{STATUS_LABELS[goal.status]}</span>}
       </div>

@@ -1,6 +1,6 @@
-import type { RecurringBody, RecurringFrequency, RecurringRule } from "../../api/recurring";
+import type { RecurringBody, RecurringFrequency, RecurringPatch, RecurringRule } from "../../api/recurring";
 import { parseRupeesToMinor } from "../../lib/money";
-import { isIsoDate } from "../accounts/format";
+import { isIsoDate, minorToRupeesText } from "../accounts/format";
 
 export interface BillFormValues {
   merchant: string;
@@ -21,6 +21,29 @@ export interface BillFormResult {
 
 export function emptyBillForm(categoryId: string, today: string): BillFormValues {
   return { merchant: "", amount: "", categoryId, frequency: "MONTHLY", nextDate: today, mandatory: true };
+}
+
+// Prefills the form from a saved bill. Amounts are shown in rupees.
+export function billFormFor(rule: RecurringRule): BillFormValues {
+  return {
+    merchant: rule.merchant_name,
+    amount: minorToRupeesText(rule.expected_amount_minor),
+    categoryId: rule.category_id,
+    frequency: rule.frequency,
+    nextDate: rule.next_expected_date,
+    mandatory: rule.is_mandatory,
+  };
+}
+
+// PATCH body for an edit. The merchant and account are not editable through the API.
+export function billPatchBody(body: RecurringBody): RecurringPatch {
+  return {
+    expected_amount_minor: body.expected_amount_minor,
+    frequency: body.frequency,
+    next_expected_date: body.next_expected_date,
+    is_mandatory: body.is_mandatory,
+    category_id: body.category_id,
+  };
 }
 
 export function validateBillForm(values: BillFormValues): BillFormResult {

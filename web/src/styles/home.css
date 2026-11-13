@@ -1,40 +1,43 @@
-/* Home: Safe-to-Spend signature block, breakdown bar and legend, stat rows, review row. */
+/* Home: Safe-to-Spend signature block, breakdown bar and legend, KPI tiles, insights, bills and review row.
+   Cards are the shared glass recipe (base.css). Below 64rem they stack; from 64rem they sit in two columns. */
 
 .home {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.safe-to-spend {
-  gap: 0.25rem;
+  gap: var(--section-gap);
+  min-width: 0;
 }
 
 .safe-to-spend .amount {
-  margin-top: 0.125rem;
+  margin-top: var(--space-1);
+  font-size: clamp(2.5rem, 9vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
   overflow-wrap: anywhere;
 }
 
 .deficit {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  margin-top: 0.25rem;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
   color: var(--negative);
 }
 
 .deficit-icon {
   flex: none;
-  margin-top: 0.125rem;
+  margin-top: var(--space-1);
 }
 
 .deficit-text {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 .deficit-title {
+  font-family: var(--font-mono);
   color: var(--negative);
   font-variant-numeric: tabular-nums;
 }
@@ -46,12 +49,12 @@
 .breakdown {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: var(--space-3);
 }
 
 .breakdown-bar {
   display: flex;
+  gap: var(--space-1);
   height: 0.75rem;
   overflow: hidden;
   border-radius: 999px;
@@ -61,6 +64,7 @@
 .breakdown-segment {
   height: 100%;
   min-width: 0;
+  border-radius: 999px;
 }
 
 .seg-cards {
@@ -88,65 +92,280 @@
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 2.25rem;
-  padding: 0.25rem 0;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  padding: var(--space-2) 0;
+}
+
+/* The first row has no swatch: let its label span two columns so the amount shares the trailing edge. */
+.legend-row > .legend-label:first-child {
+  grid-column: 1 / 3;
 }
 
 .legend-row + .legend-row {
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--border);
 }
 
 .legend-swatch {
   width: 0.75rem;
   height: 0.75rem;
-  border-radius: 0.1875rem;
+  border-radius: var(--space-1);
 }
 
 .legend-label {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .legend-amount {
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: end;
   white-space: nowrap;
 }
 
-.stat-list {
-  gap: 0;
-  padding: 0 1rem;
+/* KPI tiles: three equal glass cards in a row from 48rem, stacked below. Each tile is a dt label,
+   the amount in the mono face and one context line. The dl and dd margins are reset. */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--section-gap);
+  min-width: 0;
+  margin: 0;
 }
 
-.stat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 2.75rem;
-  padding: 0.75rem 0;
+.kpi-tile {
+  min-width: 0;
+  gap: var(--space-2);
 }
 
-.stat-row + .stat-row {
-  border-top: 1px solid var(--separator);
-}
-
-.stat-row dd {
-  font-weight: 600;
+.kpi-value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  text-align: end;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
+.kpi-context {
+  margin: 0;
+}
+
+/* The review row is a slim full-width link, not a tall card: its padding is only the block edges. */
 .review-row {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   min-height: 2.75rem;
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
   color: var(--text);
 }
 
 .review-row > .footnote {
   flex: 1 1 auto;
+}
+
+/* Insights: category bars, trend chart, highlights. Bars are decorative; text carries every value. */
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem;
+  grid-template-areas:
+    "name amount percent"
+    "track track track";
+  align-items: baseline;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+
+.cat-name {
+  grid-area: name;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cat-amount {
+  grid-area: amount;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.cat-percent {
+  grid-area: percent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.cat-track {
+  grid-area: track;
+  display: block;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.cat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.trend-chart {
+  display: block;
+  width: 100%;
+  height: 8.75rem;
+}
+
+.trend-base {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-bar.trend-spending,
+.trend-swatch.trend-spending {
+  fill: var(--accent);
+  background: var(--accent);
+}
+
+.trend-bar.trend-income,
+.trend-swatch.trend-income {
+  fill: var(--text-secondary);
+  background: var(--text-secondary);
+}
+
+.trend-months {
+  display: grid;
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--text-secondary);
+}
+
+.trend-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trend-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--space-1);
+}
+
+.highlight-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.highlight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-3) 0;
+}
+
+.highlight-item + .highlight-item {
+  border-top: 1px solid var(--border);
+}
+
+.highlight-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.highlight-flag {
+  font-size: 0.72rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.dot {
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: var(--space-1);
+  border-radius: 50%;
+}
+
+.dot-info {
+  background: var(--accent);
+}
+
+.dot-warning {
+  background: var(--warning);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--warning) 25%, transparent);
+}
+
+/* Order: hero, KPI tiles, then pairs (Spending by Category | Six-Month Trend) and
+   (Highlights | Upcoming Bills), then the review row. Two columns from 64rem: the hero, KPI row,
+   review row, notices and the loading stack span the full row; every other card takes one column
+   and shares its row's top and bottom edges. Below 64rem everything stacks in one column. */
+@media (min-width: 64rem) {
+  .home {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .home > .large-title,
+  .home > .hero,
+  .home > .kpi-grid,
+  .home > .notice,
+  .home > .review-row,
+  .home > .skeleton-stack {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 48rem) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .kpi-value {
+    font-size: 1.75rem;
+    line-height: 2.125rem;
+  }
 }

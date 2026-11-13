@@ -8,6 +8,22 @@ import type { DashboardSummary } from "../api/types";
 import { HomePage } from "./HomePage";
 
 vi.mock("../api/dashboard", () => ({ getDashboardSummary: vi.fn() }));
+// Insights have their own tests (home/InsightsSection.test.tsx); here they only need to resolve.
+vi.mock("../api/insights", () => ({
+  getInsightsSummary: vi.fn(() =>
+    Promise.resolve({
+      as_of: "2026-11-12",
+      month: "2026-11",
+      income_minor: 0,
+      expense_minor: 0,
+      net_minor: 0,
+      previous_expense_minor: 0,
+      categories: [],
+      trend: [],
+      highlights: [],
+    }),
+  ),
+}));
 
 const getSummaryMock = vi.mocked(getDashboardSummary);
 

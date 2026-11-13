@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandLockup } from "../components/BrandMark";
 
 interface AuthLayoutProps {
   title: string;
@@ -10,6 +11,7 @@ interface AuthLayoutProps {
 export function AuthLayout({ title, intro, children }: AuthLayoutProps) {
   return (
     <main className="auth-page">
+      <BrandLockup className="auth-brand" />
       <div className="auth-card">
         <h1 className="title2">{title}</h1>
         <p className="footnote">{intro}</p>

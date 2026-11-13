@@ -42,7 +42,7 @@ export function TransactionsPage() {
   return (
     <div className="tx-page">
       <header className="tx-header">
-        <h1 className="title">Transactions</h1>
+        <h1 className="large-title">Transactions</h1>
         <Button variant="primary" onClick={openAdd}>
           Add Expense
         </Button>

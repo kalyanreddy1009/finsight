@@ -4,7 +4,16 @@ import re
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    StringConstraints,
+)
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -200,3 +209,19 @@ class RecurringPatchIn(Body):
     is_mandatory: StrictBool | None = None
     is_active: StrictBool | None = None
     category_id: Id | None = None
+
+
+# ------------------------------------------------------------------------ ai
+
+ChatText = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+HistoryText = Annotated[StrictStr, StringConstraints(min_length=1, max_length=2000)]
+
+
+class ChatMessageIn(Body):
+    role: Literal["user", "assistant"]
+    content: HistoryText
+
+
+class ChatIn(Body):
+    question: ChatText
+    history: list[ChatMessageIn] = Field(default_factory=list, max_length=6)

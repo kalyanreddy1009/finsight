@@ -55,6 +55,40 @@ describe("GoalsSection", () => {
     expect(within(rowOf("Holiday")).getByText("Paused")).toBeTruthy();
   });
 
+  it("shows each goal's priority as text", async () => {
+    vi.mocked(listGoals).mockResolvedValue([goalFixture({ id: "g9", name: "Bike", priority: 3 })]);
+    render(<GoalsSection />);
+
+    await screen.findByText("Bike");
+
+    expect(within(rowOf("Bike")).getByText("Priority 3")).toBeTruthy();
+  });
+
+  it("sends the chosen priority when adding and editing, and rejects values outside 1 to 99", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listGoals).mockResolvedValue(goals);
+    vi.mocked(updateGoal).mockResolvedValue(goalFixture({ id: "g1", name: "Emergency fund", priority: 7 }));
+    render(<GoalsSection />);
+    await screen.findByText("Emergency fund");
+
+    await user.click(within(rowOf("Emergency fund")).getByRole("button", { name: "Edit" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Goal" });
+    const priority = within(dialog).getByLabelText("Priority (1 to 99)") as HTMLInputElement;
+    expect(priority.value).toBe("1");
+    await user.clear(priority);
+    await user.type(priority, "100");
+    await user.click(within(dialog).getByRole("button", { name: "Save Goal" }));
+    expect(await within(dialog).findByText("Enter a whole number from 1 to 99.")).toBeTruthy();
+    expect(updateGoal).not.toHaveBeenCalled();
+
+    await user.clear(priority);
+    await user.type(priority, "7");
+    await user.click(within(dialog).getByRole("button", { name: "Save Goal" }));
+
+    await waitFor(() => expect(updateGoal).toHaveBeenCalledWith("g1", expect.objectContaining({ priority: 7 })));
+    expect(await screen.findByText("Priority 7")).toBeTruthy();
+  });
+
   it("offers to add a goal when there are none", async () => {
     vi.mocked(listGoals).mockResolvedValue([]);
     render(<GoalsSection />);
@@ -92,6 +126,7 @@ describe("GoalsSection", () => {
         target_amount_minor: 50000000,
         current_locked_amount_minor: 0,
         monthly_contribution_minor: 1000000,
+        priority: 1,
       }),
     );
     expect(await screen.findByText("Car")).toBeTruthy();
@@ -134,6 +169,7 @@ describe("GoalsSection", () => {
         current_locked_amount_minor: 1500000,
         monthly_contribution_minor: 200000,
         target_date: null,
+        priority: 1,
         status: "PAUSED",
       }),
     );

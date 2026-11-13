@@ -82,6 +82,66 @@ describe("BillsSection", () => {
     expect(within(rowOf("Netflix")).queryByText("Optional")).toBeNull();
   });
 
+  it("edits a bill with a prefilled form and sends only the editable fields in the PATCH", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRecurring).mockResolvedValue(rules);
+    vi.mocked(updateRecurring).mockResolvedValue(
+      ruleFixture({ id: "netflix", merchant_name: "Netflix", expected_amount_minor: 64900, next_expected_date: "2026-12-05" }),
+    );
+    render(<BillsSection categories={categories} />);
+    await screen.findByText("Netflix");
+
+    await user.click(within(rowOf("Netflix")).getByRole("button", { name: "Edit" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Bill" });
+    const merchant = within(dialog).getByLabelText("Merchant") as HTMLInputElement;
+    expect(merchant.value).toBe("Netflix");
+    expect(merchant.disabled).toBe(true);
+    const amount = within(dialog).getByLabelText("Amount (₹)") as HTMLInputElement;
+    expect(amount.value).toBe("499.00");
+    await user.clear(amount);
+    await user.type(amount, "649");
+    await user.click(within(dialog).getByRole("button", { name: "Save Bill" }));
+
+    await waitFor(() =>
+      expect(updateRecurring).toHaveBeenCalledWith("netflix", {
+        expected_amount_minor: 64900,
+        frequency: "MONTHLY",
+        next_expected_date: "2026-12-05",
+        is_mandatory: true,
+        category_id: "food",
+      }),
+    );
+    expect(await screen.findByText("₹649.00 · Monthly · Due 5 Dec 2026")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Edit Bill" })).toBeNull();
+  });
+
+  it("keeps the Edit Bill title while the dialog closes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRecurring).mockResolvedValue(rules);
+    render(<BillsSection categories={categories} />);
+    await screen.findByText("Netflix");
+
+    await user.click(within(rowOf("Netflix")).getByRole("button", { name: "Edit" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Bill" });
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    expect(dialog.querySelector(".dialog-title")?.textContent).toBe("Edit Bill");
+  });
+
+  it("shows the server error and keeps the edit dialog open when saving fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRecurring).mockResolvedValue(rules);
+    vi.mocked(updateRecurring).mockRejectedValue(new Error("offline"));
+    render(<BillsSection categories={categories} />);
+    await screen.findByText("Netflix");
+
+    await user.click(within(rowOf("Netflix")).getByRole("button", { name: "Edit" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Bill" });
+    await user.click(within(dialog).getByRole("button", { name: "Save Bill" }));
+
+    expect(await within(dialog).findByText("Could not save. Try again.")).toBeTruthy();
+  });
+
   it("puts inactive bills under a Paused heading", async () => {
     vi.mocked(listRecurring).mockResolvedValue(rules);
     render(<BillsSection categories={categories} />);

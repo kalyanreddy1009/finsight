@@ -1,0 +1,227 @@
+/* Assistant: status card, summary, chat. Tokens only; rem sizes; opacity-only motion.
+   Status and summary cards are the shared glass recipe (base.css). */
+
+.assistant-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Page header (shared rule in content.css), stacked: eyebrow above the title. */
+.assistant-header {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.assistant-header > .eyebrow {
+  min-height: 0;
+}
+
+.ai-status-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-pill .dot {
+  margin-top: 0;
+}
+
+.ai-pill-ready .dot {
+  background: var(--accent);
+}
+
+.ai-pill-warning {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.ai-pill-warning .dot {
+  background: var(--warning);
+}
+
+.ai-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--card-pad);
+}
+
+.ai-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ai-command {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.ai-steps .ai-command {
+  padding: 0 var(--space-1);
+}
+
+.ai-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.ai-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--card-pad);
+  list-style: disc;
+}
+
+/* Model text is plain text: keep its line breaks, wrap long words. */
+.ai-text,
+.chat-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 4rem;
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 88%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.chat-msg-user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.chat-msg-assistant {
+  align-self: flex-start;
+  background: var(--well);
+}
+
+.chat-who {
+  font-size: 0.72rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.chat-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chat-chip {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--t-fast) var(--ease-out), opacity var(--t-fast) var(--ease-out);
+}
+
+.chat-chip:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.chat-chip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .chat-chip:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+.chat-input {
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+/* Reduced motion: no press scale. Sits last so it beats the press rule above. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-chip:active:not(:disabled) {
+    transform: none;
+  }
+}

@@ -15,7 +15,8 @@ interface BillsSectionProps {
 
 export function BillsSection({ categories }: BillsSectionProps) {
   const loader = useLoader(listRecurring);
-  const [adding, setAdding] = useState(false);
+  // Open dialog: { rule: null } adds a bill, { rule } edits that one.
+  const [dialog, setDialog] = useState<{ rule: RecurringRule | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function BillsSection({ categories }: BillsSectionProps) {
   }
 
   const actions: BillListActions = {
+    onEdit: (rule) => setDialog({ rule }),
     onMarkPaid: (rule) =>
       void perform(
         rule.id,
@@ -72,7 +74,7 @@ export function BillsSection({ categories }: BillsSectionProps) {
         <h2 id="bills-heading" className="plan-section-title">
           Bills
         </h2>
-        {hasBills ? <Button onClick={() => setAdding(true)}>Add Bill</Button> : null}
+        {hasBills ? <Button onClick={() => setDialog({ rule: null })}>Add Bill</Button> : null}
       </div>
       {state.status === "loading" ? (
         <p className="empty-state" role="status">
@@ -85,7 +87,7 @@ export function BillsSection({ categories }: BillsSectionProps) {
       {state.status === "ready" && state.data.length === 0 ? (
         <div className="empty-block">
           <p className="empty-state">No recurring bills yet. Add a bill to see what is due next.</p>
-          <Button onClick={() => setAdding(true)}>Add Bill</Button>
+          <Button onClick={() => setDialog({ rule: null })}>Add Bill</Button>
         </div>
       ) : null}
       {state.status === "ready" && state.data.length > 0 ? (
@@ -97,12 +99,15 @@ export function BillsSection({ categories }: BillsSectionProps) {
         </p>
       ) : null}
       <BillDialog
-        open={adding}
+        open={dialog !== null}
+        rule={dialog?.rule ?? null}
         categories={categories}
-        onClose={() => setAdding(false)}
-        onCreated={(rule) => {
-          loader.update((rules) => [...rules, rule]);
-          setAdding(false);
+        onClose={() => setDialog(null)}
+        onSaved={(saved) => {
+          loader.update((rules) =>
+            rules.some((rule) => rule.id === saved.id) ? rules.map((rule) => (rule.id === saved.id ? saved : rule)) : [...rules, saved],
+          );
+          setDialog(null);
         }}
       />
     </section>

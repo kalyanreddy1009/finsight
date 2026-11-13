@@ -1,9 +1,16 @@
-/* Reset, type scale (rem, Apple scale), focus ring, and the accessibility preference answers. */
+/* Reset, type scale (rem), ambient background, focus ring, the one shared glass recipe, and the accessibility answers. */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+:root {
+  /* Blur and saturation for every translucent surface. Reduced transparency and no-support set it to none. */
+  --glass-filter: blur(var(--glass-blur)) saturate(160%);
+  /* One header height: page titles, card labels and header buttons all share it, so their centre lines match. */
+  --header-height: 2.75rem;
 }
 
 html {
@@ -13,13 +20,32 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--font-system);
-  font-size: 1.0625rem;
-  line-height: 1.375rem;
+  font-family: var(--font-ui);
+  font-feature-settings: "cv11", "ss01";
+  font-size: 1rem;
+  line-height: 1.5;
   color: var(--text);
   background: var(--surface-grouped);
   -webkit-font-smoothing: antialiased;
   overflow-wrap: break-word;
+}
+
+/* Fixed ambient layer behind everything: three soft glows (top-leading, upper-right, bottom-trailing)
+   and a faint static grid. The glows and grid give the glass something to refract. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* The top glows run at half strength so secondary text on the glass keeps at least 4.5:1 at the glow's peak. */
+  background-image:
+    radial-gradient(60rem 40rem at 0% 0%, color-mix(in srgb, var(--ambient-a) 50%, transparent), transparent 70%),
+    radial-gradient(44rem 30rem at 80% 30%, color-mix(in srgb, var(--ambient-a) 50%, transparent), transparent 70%),
+    radial-gradient(56rem 40rem at 100% 100%, var(--ambient-b), transparent 70%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: auto, auto, auto, 2rem 2rem, 2rem 2rem;
 }
 
 h1,
@@ -38,7 +64,8 @@ ul {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   color: inherit;
 }
@@ -47,12 +74,12 @@ a {
   color: var(--accent);
 }
 
-/* Type scale: Large Title 34/41, Title 28/34, Title 2 22/28, Headline 17/22 semibold,
-   Subhead 15/20, Footnote 13/18. Nothing below 11px. */
+/* Type scale in rem. Nothing below 0.6875rem. Titles carry tightened tracking. */
 .large-title {
   font-size: 2.125rem;
-  line-height: 2.5625rem;
+  line-height: var(--header-height);
   font-weight: 700;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -60,18 +87,21 @@ a {
   font-size: 1.75rem;
   line-height: 2.125rem;
   font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .title2 {
   font-size: 1.375rem;
   line-height: 1.75rem;
-  font-weight: 700;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .headline {
   font-size: 1.0625rem;
   line-height: 1.375rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .subhead {
@@ -87,6 +117,41 @@ a {
   color: var(--text-secondary);
 }
 
+/* Figures: monospaced, tabular. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: normal;
+}
+
+/* Card and section labels share one style: accent eyebrow with a leading rule. */
+.eyebrow,
+.section-title,
+.plan-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--header-height);
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.eyebrow::before,
+.section-title::before,
+.plan-section-title::before {
+  content: "";
+  flex: none;
+  width: 1.125rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -100,8 +165,98 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* One glass recipe. Cards, panels and sheets share the first list; floating chrome (tab bar,
+   desktop header, dialogs) shares the second, with the stronger fill and the larger shadow. */
+.card,
+.accounts-section,
+.plan-section,
+.tx-group-rows,
+.auth-card,
+.tx-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--card-pad);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--glass-edge) 22%, transparent), transparent 45%), var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow-raised);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.primary-nav,
+.app-header,
+.app-dialog {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--glass-edge) 22%, transparent), transparent 45%), var(--glass-strong);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow-float);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: var(--text);
+}
+
+/* Links that are cards press in on :active; they lift on hover only with a fine pointer. */
+a.card {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+a.card:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a.card:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* prefers-reduced-transparency and no backdrop-filter support: solid surfaces, no blur. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --glass-filter: none;
+  }
+
+  .card,
+  .accounts-section,
+  .plan-section,
+  .tx-group-rows,
+  .auth-card,
+  .tx-filters,
+  .primary-nav,
+  .app-header,
+  .app-dialog {
+    background: var(--surface);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --glass-filter: none;
+  }
+
+  .card,
+  .accounts-section,
+  .plan-section,
+  .tx-group-rows,
+  .auth-card,
+  .tx-filters,
+  .primary-nav,
+  .app-header,
+  .app-dialog {
+    background: var(--surface);
+  }
 }
 
 /* prefers-reduced-motion: no transforms; opacity cross-fades of 150ms at most. */
@@ -115,28 +270,51 @@ a {
     transition-duration: 150ms !important;
   }
 
-  .btn:active:not(:disabled) {
+  a.card:active,
+  a.card:hover {
     transform: none;
   }
 }
 
-/* prefers-contrast: more: 1px text-colored borders on cards and controls. */
+/* prefers-contrast: more: solid surfaces and 1px text-colored borders on every glass surface and control. */
 @media (prefers-contrast: more) {
-  .card,
-  .btn,
-  .field-input,
-  .primary-nav {
-    border-color: var(--text);
+  :root {
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --glass-filter: none;
+    --border: var(--text);
+    --border-strong: var(--text);
+    --border-control: var(--text);
+    --glass-edge: transparent;
+  }
+
+  body::before {
+    display: none;
   }
 
   .card,
+  .accounts-section,
+  .plan-section,
+  .tx-group-rows,
+  .auth-card,
+  .tx-filters,
+  .primary-nav,
+  .app-header,
+  .app-dialog,
   .btn,
   .field-input {
-    border-width: 1px;
-    border-style: solid;
+    border: 1px solid var(--text);
   }
 
-  .field-input {
-    border-color: var(--text);
+  .card,
+  .accounts-section,
+  .plan-section,
+  .tx-group-rows,
+  .auth-card,
+  .tx-filters,
+  .primary-nav,
+  .app-header,
+  .app-dialog {
+    background: var(--surface);
   }
 }

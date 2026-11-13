@@ -82,6 +82,8 @@ function TransactionDetailBody({
   );
 }
 
+const MONEY_FACTS: ReadonlySet<string> = new Set(["Amount", "Your share"]);
+
 function TransactionFacts({ transaction }: { transaction: Transaction }) {
   const facts: Array<[string, string]> = [
     ["Date", formatDateHeading(transaction.transaction_date)],
@@ -103,7 +105,7 @@ function TransactionFacts({ transaction }: { transaction: Transaction }) {
       {facts.map(([label, value]) => (
         <div key={label}>
           <dt>{label}</dt>
-          <dd>{value}</dd>
+          <dd className={MONEY_FACTS.has(label) ? "num" : undefined}>{value}</dd>
         </div>
       ))}
     </dl>

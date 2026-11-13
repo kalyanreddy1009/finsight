@@ -5,8 +5,8 @@ import { BreakdownBar } from "./BreakdownBar";
 
 export function SafeToSpend({ safe }: { safe: SafeToSpendData }) {
   return (
-    <section className="card safe-to-spend" aria-labelledby="safe-to-spend-heading">
-      <h2 id="safe-to-spend-heading" className="subhead">
+    <section className="card safe-to-spend hero" aria-labelledby="safe-to-spend-heading">
+      <h2 id="safe-to-spend-heading" className="eyebrow">
         Safe to Spend
       </h2>
       {safe.is_liquidity_deficit ? (
@@ -22,7 +22,7 @@ export function SafeToSpend({ safe }: { safe: SafeToSpendData }) {
         </div>
       ) : (
         <>
-          <p className="large-title amount">{formatMinor(safe.safe_to_spend_minor)}</p>
+          <p className="large-title amount num">{formatMinor(safe.safe_to_spend_minor)}</p>
           <p className="footnote">Safe to spend today: {formatMinor(safe.daily_safe_burn_minor)}</p>
         </>
       )}

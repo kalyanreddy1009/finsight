@@ -1,37 +1,67 @@
-/* Transactions tab: filters, date-grouped rows, quick add and detail dialogs. Tokens only; rem sizes. */
+/* Transactions tab: filters, date-grouped rows, quick add and detail dialogs. Tokens only; rem sizes.
+   The date groups are the shared glass recipe (base.css); rows inset by the card padding. */
 
 .tx-page {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  max-width: var(--content-max);
+  gap: var(--section-gap);
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.tx-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+/* Nothing inside the page may be wider than its column, so both gutters stay equal. */
+.tx-page .tx-filters,
+.tx-page .tx-filter-grid,
+.tx-page .field,
+.tx-page .tx-group-rows,
+.tx-page .tx-group-rows > li {
+  min-width: 0;
+  max-width: 100%;
 }
 
+.tx-page .field-input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Toolbar card (glass recipe in base.css). Stacked on small screens; from 48rem the search spans the
+   top row and the two selects and the checkbox share the row below. The checkbox is 2.75rem tall, the
+   same as the select inputs, so with end alignment its centre matches theirs. */
 .tx-filters {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .tx-filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: 0.75rem;
+  gap: var(--space-3);
+}
+
+@media (min-width: 48rem) {
+  .tx-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    align-items: end;
+    gap: var(--space-3) var(--space-4);
+  }
+
+  .tx-filters > .field {
+    grid-column: 1 / -1;
+  }
+
+  .tx-filter-grid {
+    display: contents;
+  }
 }
 
 .tx-toggle {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-height: 2.75rem;
   font-size: 0.9375rem;
   font-weight: 600;
@@ -47,49 +77,69 @@
 .tx-list {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--section-gap);
   min-width: 0;
 }
 
 .tx-group {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .tx-date-heading {
   margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.125rem;
+  font-size: 0.72rem;
+  line-height: 1rem;
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
+/* The date group is one flush card: rows separated by hairlines, no card padding of its own. */
 .tx-group-rows {
   margin: 0;
   padding: 0;
+  gap: 0;
   list-style: none;
-  background: var(--surface);
-  border-radius: var(--radius);
 }
 
 .tx-group-rows > li + li {
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--border);
+}
+
+/* Outer rows follow the card's corner radius so hover and focus rings stay on the card's shape. */
+.tx-group-rows > li:first-child > .tx-row {
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.tx-group-rows > li:last-child > .tx-row {
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 .tx-row {
   width: 100%;
   min-height: 2.75rem;
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--card-pad);
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
   text-align: start;
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 100ms ease-out;
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .tx-row:hover {
+    background: var(--well);
+  }
 }
 
 /* Press feedback starts on pointer-down. */
@@ -100,6 +150,7 @@
 .tx-row-main {
   flex: 1 1 auto;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tx-row-title {
@@ -120,19 +171,20 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .tx-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: var(--space-1);
 }
 
 .tx-badge {
-  padding: 0.0625rem 0.5rem;
-  border: 1px solid var(--text-secondary);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent-border);
   border-radius: 999px;
+  background: var(--accent-soft);
   color: var(--text);
   font-size: 0.75rem;
   line-height: 1rem;
@@ -166,49 +218,49 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .tx-segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--text-secondary);
-  border-radius: 0.625rem;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--well);
 }
 
 .tx-segment {
   min-height: 2.75rem;
-  padding: 0.5rem;
+  padding: var(--space-2);
   border: 0;
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 100ms ease-out;
+  transition: transform var(--t-fast) var(--ease-out);
 }
 
 .tx-segment:active {
   transform: scale(0.97);
 }
 
-.tx-segment + .tx-segment {
-  border-left: 1px solid var(--text-secondary);
-}
-
 /* Pressed state uses fill, weight and underline, not color alone. */
 .tx-segment[aria-pressed="true"] {
-  background: var(--accent);
+  background: linear-gradient(to bottom, var(--accent-fill-top), var(--accent));
   color: var(--on-accent);
+  font-weight: 700;
   text-decoration: underline;
 }
 
 .tx-split {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -225,7 +277,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .tx-split-row > .field {
@@ -235,6 +287,7 @@
 
 .tx-share {
   margin: 0;
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -242,7 +295,7 @@
 .tx-dialog-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--section-gap);
 }
 
 .tx-details {
@@ -254,9 +307,9 @@
 .tx-details > div {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  padding: 0.5rem 0;
-  border-top: 1px solid var(--separator);
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
 }
 
 .tx-details dt {
@@ -271,6 +324,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tx-details dd.num {
+  font-family: var(--font-mono);
+}
+
+/* Reduced motion: no transitions or press scale; the press shows as a fade instead. */
 @media (prefers-reduced-motion: reduce) {
   .tx-row,
   .tx-segment {

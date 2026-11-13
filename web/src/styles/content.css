@@ -1,17 +1,30 @@
-/* Cards, list rows, notices, empty states and loading skeletons. */
+/* Card contents: header pattern, list rows, notices, empty states and loading placeholders.
+   The card surface itself is the shared glass recipe in base.css. */
 
-.card {
+/* Card and page header: label on the leading edge, optional action on the trailing edge.
+   The card gap (space-3) supplies the space below the header in every card. */
+.page-header,
+.plan-header,
+.tx-header,
+.assistant-header,
+.section-header,
+.plan-section-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: var(--surface);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text);
-  text-decoration: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
+/* Card headers share one height, so the first content line sits at the same offset in every card. */
+.section-header,
+.plan-section-header {
+  min-height: var(--header-height);
+}
+
+/* List rows: one min-height and one vertical rhythm. Inside a padded card they take no
+   horizontal padding, so their text starts on the card's inner edge. */
 .row-list {
   display: flex;
   flex-direction: column;
@@ -21,23 +34,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
+  min-width: 0;
   min-height: 2.75rem;
-  padding: 0.75rem 0;
+  padding: var(--space-3) 0;
 }
 
 .row + .row {
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--border);
 }
 
 .row-main {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .row-amount {
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: end;
@@ -59,34 +75,30 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
+/* Alert card: same glass, with a stronger hairline. */
 .notice {
-  gap: 0.75rem;
-  border-color: var(--separator);
+  border-color: var(--border-strong);
 }
 
 .placeholder {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .skeleton-stack {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--section-gap);
 }
 
-.skeleton-card {
-  gap: 0.75rem;
-}
-
-/* Static blocks: no shimmer, so there is no looping motion. */
+/* Loading blocks are static tracks: no looping motion. */
 .skeleton {
   background: var(--track);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
 }
 
 .skeleton-subhead {

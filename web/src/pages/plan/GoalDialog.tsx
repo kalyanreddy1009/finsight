@@ -122,6 +122,16 @@ function GoalForm({ goal, onCancel, onSaved }: GoalFormProps) {
         error={errors.targetDate}
         onChange={(event) => update({ targetDate: event.target.value })}
       />
+      <Field
+        id="goal-priority"
+        label="Priority (1 to 99)"
+        inputMode="numeric"
+        autoComplete="off"
+        value={values.priority}
+        disabled={saving}
+        error={errors.priority}
+        onChange={(event) => update({ priority: event.target.value })}
+      />
       {goal === null ? null : (
         <SelectField
           id="goal-status"

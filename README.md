@@ -18,15 +18,16 @@ The full specification is in [finsight_v2_0_technical_architecture_and_engineeri
 | Transactions | Built | Expense, income, transfer, refund; expense splits; settle split; reverse; edit notes, tax section and category |
 | Statement import | Built, CSV only | Upload, row review, commit once reconciled |
 | Dashboard | Built | Safe-to-spend summary |
-| Web client | Built | Home, Transactions, Accounts, Plan tabs. Plan holds budgets, recurring bills, goals, tax summary and categories |
+| Spending insights | Built | `GET /api/v1/insights/summary`, computed without AI. Home cards for spending by category, the six-month trend and highlights. The Assistant tab shows the same highlights |
+| Web client | Built | Home, Transactions, Accounts, Plan and Assistant tabs. Plan holds budgets, recurring bills, goals, tax summary and categories |
 | Bank and card PDF parsers | Not built | PDF uploads are rejected (`NO_PARSER`); needs sample statements |
 | Budgets | Built | Monthly total limit and per-category limits; spending is read from posted ledger entries |
-| Recurring bills | Built | Add, mark paid (advances the next due date only), pause or resume, delete. Editing is in the API only, not the web client |
+| Recurring bills | Built | Add, edit, mark paid (advances the next due date only), pause or resume, delete. Editing works in the web client and the API. The merchant cannot be changed after creation |
 | Price-creep detection | Not built | No detection code exists |
-| Goals | Built | Target, amount set aside, monthly contribution, status (Active, Paused, Completed). Priority is accepted by the API only |
+| Goals | Built | Target, amount set aside, monthly contribution, status (Active, Paused, Completed), priority (1 to 99). Priority can be set and edited in the web client |
 | Investments, CAS import, XIRR screens | Not built | `backend/app/finance/xirr_engine.py` exists; no endpoint or screen uses it |
 | Tax summary | Built | Totals per tax section for an Indian financial year (April to March). Shows old-regime limits as information only: 80C ₹1,50,000, 80D ₹25,000, 80CCD ₹50,000, 24B ₹2,00,000 |
-| AI assistant | Not built | Assistant tab is a placeholder; `backend/app/ai/privacy_filter.py` is not wired to any route |
+| AI assistant | Built, local only | Ollama on this machine: status, chat and monthly summary. Off until Ollama is running with the model pulled. See [Local AI assistant](#local-ai-assistant-optional) |
 | Offline sync | Not built | `/sync/*` is deferred per CLAUDE.md |
 | Backend serving the web build | Not built | Only the Vite dev server is set up |
 | Docker deployment | Not built | No Dockerfile |
@@ -78,6 +79,9 @@ Settings are read from `FINSIGHT_*` environment variables only. The app does not
 | `FINSIGHT_DB_KEY` | No | Passphrase for SQLCipher. Only used when `FINSIGHT_DB_DRIVER=sqlcipher`. | Any long random string |
 | `FINSIGHT_ALLOWED_ORIGINS` | No | JSON list of browser origins allowed to call the API. Empty by default. `"*"` is refused. The Vite dev proxy does not need it. | `'["http://localhost:5173"]'` |
 | `FINSIGHT_CLOUD_AI_ENABLED` | No | Read into settings but nothing uses it yet. | Leave unset |
+| `FINSIGHT_OLLAMA_URL` | No | Address of the local Ollama server. Default `http://127.0.0.1:11434`. The host must be `localhost` or a loopback address (`127.0.0.1`, `::1`, any `127.x.x.x`), with no user name or password. Any other host is refused with `AI_NOT_LOCAL`. | Leave unset unless Ollama listens on another port here |
+| `FINSIGHT_OLLAMA_MODEL` | No | Model name sent to Ollama for chat and the monthly summary. Default `llama3.2:3b`. The model must be installed in Ollama, or the Assistant status shows it as missing. | Leave unset, or set the name of a model you pulled |
+| `FINSIGHT_AI_TIMEOUT_SECONDS` | No | Time limit for one AI request, in whole seconds. Default `120`. Allowed range `1` to `600`. | Leave unset |
 
 Example, with placeholder values only (bash):
 
@@ -113,6 +117,11 @@ Open `http://localhost:5173`. That is the Vite default; `web/vite.config.ts` doe
 The dev server proxies every `/api` request to `http://127.0.0.1:8000`, so start the backend first and
 use the Vite URL in the browser. The browser never calls the backend port directly.
 
+To proxy to a backend on another address, set `FINSIGHT_API_TARGET` in the shell or in a `.env`
+file in `web/`, for example `FINSIGHT_API_TARGET=http://127.0.0.1:8001`. `web/vite.config.ts` reads
+it. The default is `http://127.0.0.1:8000`. This setting belongs to the web client; the backend
+still reads no `.env` file.
+
 ## First run
 
 1. Start the backend with `FINSIGHT_JWT_SECRET`, `FINSIGHT_SETUP_TOKEN` and `FINSIGHT_MASTER_KEY` set.
@@ -145,6 +154,37 @@ or `31/12/26`; amounts in rupees with at most two decimals, optionally with a `�
 a `Cr`/`Dr` suffix or commas; exactly one of debit or credit above zero per row. Newest-first files are
 reversed automatically. Limits: 25 MB and 20,000 data rows.
 
+## Local AI assistant (optional)
+
+The Assistant tab answers questions with a model that runs on this machine through
+[Ollama](https://ollama.com). It stays off until Ollama is running and the model is installed.
+
+1. Install Ollama from `ollama.com`.
+2. Pull the default model. Its name is the default of `FINSIGHT_OLLAMA_MODEL`:
+
+   ```bash
+   ollama pull llama3.2:3b
+   ```
+
+3. Start Ollama. The desktop app runs the server in the background. `ollama serve` runs it in a
+   terminal. The default address is `http://127.0.0.1:11434`.
+4. Start the backend and the web client, sign in, and open the Assistant tab. The Local AI card
+   should show Ready.
+
+How it works:
+
+- FinSight computes every figure from the ledger. The model only words them. It gets a snapshot
+  of your numbers and is told not to recompute totals. It has no tools and cannot change the ledger.
+- One AI request runs at a time. The server refuses a second request with `AI_BUSY` (HTTP 429), and
+  the page disables Send and the suggestion chips while a request runs.
+- Each request that reaches the model writes one row to the `ai_requests` table in the local database:
+  the purpose, the outcome, the latency and a hash of the facts. The question and the answer text are not stored.
+  Monthly summaries are also saved in `ai_insights`.
+- Nothing leaves the machine. The only network call goes to the Ollama address above.
+
+If the Ollama address is not `localhost` or a loopback IP, the AI endpoints return `AI_NOT_LOCAL`
+and no request is sent.
+
 ## Security notes
 
 - The refresh cookie `fs_refresh` is `HttpOnly`, `Secure` and `SameSite=Strict`. Browsers keep `Secure`
@@ -154,7 +194,9 @@ reversed automatically. Limits: 25 MB and 20,000 data rows.
 - Login throttling is in memory: 5 failed attempts per client address and 50 across all addresses, per
   15 minutes. Setup-code failures count too. Counters reset on restart. `X-Forwarded-For` is not trusted.
 - Secrets come only from environment variables. Do not commit them or put them in a `.env` file.
-- Nothing is sent to an external service. The backend makes no outbound HTTP calls.
+- The only outbound HTTP call is to the local Ollama server at `FINSIGHT_OLLAMA_URL`, and only when
+  the assistant is used. The address must be `localhost` or a loopback IP. Redirects are not followed,
+  and proxy environment variables are ignored for this call.
 
 ## Tests and checks
 

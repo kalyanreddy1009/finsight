@@ -8,10 +8,11 @@ export interface GoalFormValues {
   locked: string;
   monthly: string;
   targetDate: string;
+  priority: string;
   status: GoalStatus;
 }
 
-export type GoalFormField = "name" | "target" | "locked" | "monthly" | "targetDate";
+export type GoalFormField = "name" | "target" | "locked" | "monthly" | "targetDate" | "priority";
 export type GoalFormErrors = Partial<Record<GoalFormField, string>>;
 
 // Validated values in API units. target_date is null when the goal has no date.
@@ -21,6 +22,7 @@ export interface GoalFields {
   current_locked_amount_minor: number;
   monthly_contribution_minor: number;
   target_date: string | null;
+  priority: number;
   status: GoalStatus;
 }
 
@@ -29,11 +31,15 @@ export interface GoalFormResult {
   fields: GoalFields | null;
 }
 
+export const MIN_PRIORITY = 1;
+export const MAX_PRIORITY = 99;
+export const PRIORITY_ERROR = "Enter a whole number from 1 to 99.";
+
 export const LOCKED_OVER_TARGET_ERROR = "Amount set aside cannot be more than the target. Lower it or raise the target.";
 
 export function goalFormFor(goal: Goal | null): GoalFormValues {
   if (goal === null) {
-    return { name: "", target: "", locked: "", monthly: "", targetDate: "", status: "ACTIVE" };
+    return { name: "", target: "", locked: "", monthly: "", targetDate: "", priority: String(MIN_PRIORITY), status: "ACTIVE" };
   }
   return {
     name: goal.name,
@@ -41,6 +47,7 @@ export function goalFormFor(goal: Goal | null): GoalFormValues {
     locked: minorToRupeesText(goal.current_locked_amount_minor),
     monthly: minorToRupeesText(goal.monthly_contribution_minor),
     targetDate: goal.target_date ?? "",
+    priority: String(goal.priority),
     status: goal.status,
   };
 }
@@ -50,12 +57,23 @@ function optionalRupees(text: string): number | null {
   return text.trim() === "" ? 0 : parseRupeesToMinor(text.trim());
 }
 
+// Null when the text is not a whole number in the allowed range.
+function parsePriority(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d{1,2}$/.test(trimmed)) {
+    return null;
+  }
+  const value = Number(trimmed);
+  return value >= MIN_PRIORITY && value <= MAX_PRIORITY ? value : null;
+}
+
 export function validateGoalForm(values: GoalFormValues): GoalFormResult {
   const name = values.name.trim();
   const target = parseRupeesToMinor(values.target.trim());
   const locked = optionalRupees(values.locked);
   const monthly = optionalRupees(values.monthly);
   const targetDate = values.targetDate.trim();
+  const priority = parsePriority(values.priority);
   const errors: GoalFormErrors = {};
   if (name === "") {
     errors.name = "Enter a name for the goal.";
@@ -72,10 +90,13 @@ export function validateGoalForm(values: GoalFormValues): GoalFormResult {
   if (targetDate !== "" && !isIsoDate(targetDate)) {
     errors.targetDate = "Enter a valid target date.";
   }
+  if (priority === null) {
+    errors.priority = PRIORITY_ERROR;
+  }
   if (target !== null && locked !== null && locked > target) {
     errors.locked = LOCKED_OVER_TARGET_ERROR;
   }
-  if (Object.keys(errors).length > 0 || target === null || locked === null || monthly === null) {
+  if (Object.keys(errors).length > 0 || target === null || locked === null || monthly === null || priority === null) {
     return { errors, fields: null };
   }
   return {
@@ -86,6 +107,7 @@ export function validateGoalForm(values: GoalFormValues): GoalFormResult {
       current_locked_amount_minor: locked,
       monthly_contribution_minor: monthly,
       target_date: targetDate === "" ? null : targetDate,
+      priority,
       status: values.status,
     },
   };
@@ -98,6 +120,7 @@ export function goalCreateBody(fields: GoalFields): GoalBody {
     target_amount_minor: fields.target_amount_minor,
     current_locked_amount_minor: fields.current_locked_amount_minor,
     monthly_contribution_minor: fields.monthly_contribution_minor,
+    priority: fields.priority,
   };
   return fields.target_date === null ? body : { ...body, target_date: fields.target_date };
 }

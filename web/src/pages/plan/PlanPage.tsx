@@ -21,7 +21,7 @@ export function PlanPage() {
   return (
     <div className="plan-page">
       <header className="plan-header">
-        <h1 className="title">Plan</h1>
+        <h1 className="large-title">Plan</h1>
       </header>
       <BudgetSection categories={loadedCategories} />
       <BillsSection categories={loadedCategories} />

@@ -12,7 +12,7 @@ function formatDueDate(isoDate: string): string {
 export function UpcomingBills({ bills }: { bills: UpcomingBill[] }) {
   return (
     <section className="card" aria-labelledby="upcoming-bills-heading">
-      <h2 id="upcoming-bills-heading" className="title2">
+      <h2 id="upcoming-bills-heading" className="eyebrow">
         Upcoming Bills
       </h2>
       {bills.length === 0 ? (

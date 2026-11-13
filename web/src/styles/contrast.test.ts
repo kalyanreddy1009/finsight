@@ -63,6 +63,13 @@ describe("design token contrast (WCAG 2.x, computed from token values)", () => {
     });
   }
 
+  for (const [theme, tokens] of Object.entries(THEMES)) {
+    it(`${theme}: --on-accent on --accent-fill-top is at least ${MIN_TEXT_RATIO}:1`, () => {
+      const ratio = contrastRatio(tokenValue(tokens, "on-accent"), tokenValue(tokens, "accent-fill-top"));
+      expect(ratio).toBeGreaterThanOrEqual(MIN_TEXT_RATIO);
+    });
+  }
+
   it("declares both themes with the same token names", () => {
     expect([...THEMES.dark.keys()].sort()).toEqual([...THEMES.light.keys()].sort());
   });

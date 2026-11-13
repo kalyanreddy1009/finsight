@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { createRecurring, type RecurringFrequency, type RecurringRule } from "../../api/recurring";
+import { createRecurring, updateRecurring, type RecurringFrequency, type RecurringRule } from "../../api/recurring";
 import type { Category } from "../../api/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
@@ -7,34 +7,42 @@ import { Field } from "../../components/Field";
 import { SelectField } from "../../components/SelectField";
 import { todayIso } from "../accounts/format";
 import { expenseCategoriesOf } from "./budgetForm";
-import { emptyBillForm, validateBillForm, type BillFormErrors, type BillFormValues } from "./billForm";
+import { billFormFor, billPatchBody, emptyBillForm, validateBillForm, type BillFormErrors, type BillFormValues } from "./billForm";
 import { FREQUENCY_OPTIONS, errorText } from "./planFormat";
 
 interface BillDialogProps {
   open: boolean;
+  // The bill being edited, or null to add a new one.
+  rule: RecurringRule | null;
   categories: readonly Category[] | null;
   onClose: () => void;
-  onCreated: (rule: RecurringRule) => void;
+  onSaved: (rule: RecurringRule) => void;
 }
 
-export function BillDialog({ open, categories, onClose, onCreated }: BillDialogProps) {
+export function BillDialog({ open, rule, categories, onClose, onSaved }: BillDialogProps) {
+  // The title keeps the last mode while the dialog closes, so it does not flip to "Add Bill" mid-close.
+  const [editing, setEditing] = useState(rule !== null);
+  if (open && editing !== (rule !== null)) {
+    setEditing(rule !== null);
+  }
   return (
-    <Dialog open={open} title="Add Bill" onClose={onClose}>
-      {open ? <BillForm categories={categories} onCancel={onClose} onCreated={onCreated} /> : null}
+    <Dialog open={open} title={editing ? "Edit Bill" : "Add Bill"} onClose={onClose}>
+      {open ? <BillForm rule={rule} categories={categories} onCancel={onClose} onSaved={onSaved} /> : null}
     </Dialog>
   );
 }
 
 interface BillFormProps {
+  rule: RecurringRule | null;
   categories: readonly Category[] | null;
   onCancel: () => void;
-  onCreated: (rule: RecurringRule) => void;
+  onSaved: (rule: RecurringRule) => void;
 }
 
-// Mounted only while the dialog is open, so every opening starts from an empty form.
-function BillForm({ categories, onCancel, onCreated }: BillFormProps) {
+// Mounted only while the dialog is open, so every opening starts from the saved bill or an empty form.
+function BillForm({ rule, categories, onCancel, onSaved }: BillFormProps) {
   const expenses = expenseCategoriesOf(categories ?? []);
-  const [values, setValues] = useState<BillFormValues>(() => emptyBillForm("", todayIso()));
+  const [values, setValues] = useState<BillFormValues>(() => (rule === null ? emptyBillForm("", todayIso()) : billFormFor(rule)));
   const [errors, setErrors] = useState<BillFormErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -53,7 +61,7 @@ function BillForm({ categories, onCancel, onCreated }: BillFormProps) {
     }
     setSaving(true);
     try {
-      onCreated(await createRecurring(result.body));
+      onSaved(rule === null ? await createRecurring(result.body) : await updateRecurring(rule.id, billPatchBody(result.body)));
     } catch (error) {
       setServerError(errorText(error, "Could not save. Try again."));
       setSaving(false);
@@ -68,7 +76,8 @@ function BillForm({ categories, onCancel, onCreated }: BillFormProps) {
         label="Merchant"
         autoComplete="off"
         value={values.merchant}
-        disabled={saving}
+        disabled={saving || rule !== null}
+        hint={rule === null ? undefined : "The merchant cannot be changed. Delete the bill and add it again to rename it."}
         error={errors.merchant}
         onChange={(event) => update({ merchant: event.target.value })}
       />
@@ -129,7 +138,7 @@ function BillForm({ categories, onCancel, onCreated }: BillFormProps) {
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={saving}>
-          {saving ? "Adding…" : "Add Bill"}
+          {saving ? (rule === null ? "Adding…" : "Saving…") : rule === null ? "Add Bill" : "Save Bill"}
         </Button>
       </div>
     </form>

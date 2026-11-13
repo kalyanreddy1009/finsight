@@ -2,12 +2,14 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     accounts,
+    ai,
     auth,
     budgets,
     categories,
     dashboard,
     goals,
     health,
+    insights,
     recurring,
     splits,
     statements,
@@ -29,5 +31,7 @@ for module in (
     recurring,
     goals,
     tax,
+    insights,
+    ai,
 ):
     api_router.include_router(module.router)

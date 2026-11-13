@@ -17,7 +17,7 @@ export function AccountsOverview() {
   return (
     <div className="accounts-page">
       <header className="page-header">
-        <h1 className="title">Accounts</h1>
+        <h1 className="large-title">Accounts</h1>
         <Button variant="primary" onClick={() => setAddOpen(true)}>
           Add Account
         </Button>

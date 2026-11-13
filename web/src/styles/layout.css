@@ -1,21 +1,22 @@
-/* App shell: bottom tab bar below 768px, leading sidebar at 768px and wider. */
+/* App shell: bottom tab bar below 48rem, floating glass pill header at 48rem and wider.
+   The glass recipe itself lives in base.css; this file only places and resizes it. */
 
 .skip-link {
   position: absolute;
   left: var(--gutter);
   top: -10rem;
-  z-index: 10;
-  padding: 0.75rem 1rem;
+  z-index: 20;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
   text-decoration: none;
-  border: 1px solid var(--text-secondary);
+  border: 1px solid var(--accent);
 }
 
 .skip-link:focus {
-  top: 0.5rem;
+  top: var(--space-2);
 }
 
 .app-shell {
@@ -23,33 +24,86 @@
   min-height: 100dvh;
 }
 
+/* Every page sits in one centred column: same max width and gutters as the header. */
 .app-main {
   padding: var(--gutter);
   padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + var(--gutter));
 }
 
 .page {
-  max-width: var(--content-max);
+  width: 100%;
+  max-width: var(--content-wide);
+  min-width: 0;
   margin: 0 auto;
+  padding-top: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--section-gap);
 }
 
+/* Slim static header on small screens: brand only, no glass. The nav inside it is fixed to the bottom.
+   Sign Out sits at the right end of the brand row. */
+.app-header {
+  display: flex;
+  align-items: center;
+  padding: calc(var(--space-3) + env(safe-area-inset-top)) var(--gutter) 0;
+}
+
+.app-header .sign-out-button {
+  margin-inline-start: auto;
+}
+
+/* Brand lockup (components/BrandMark.tsx). */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+}
+
+.brand-mark {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  overflow: visible;
+}
+
+.brand-mark-ring,
+.brand-mark-line {
+  stroke: currentColor;
+}
+
+.brand-mark-spark {
+  fill: var(--glint);
+  filter: drop-shadow(0 0 3px var(--glow));
+}
+
+.brand-word {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.brand-word-accent {
+  color: var(--accent);
+}
+
+/* Tab bar (below 48rem): fixed to the bottom, glass recipe from base.css. */
 .primary-nav {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 5;
-  background: var(--surface);
-  border-top: 1px solid var(--separator);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .primary-nav-list {
   display: flex;
   justify-content: space-around;
+  gap: var(--space-1);
 }
 
 .primary-nav-list > li {
@@ -62,16 +116,27 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.125rem;
-  min-height: 3.5rem;
+  gap: var(--space-1);
+  min-height: 3.25rem;
   min-width: 2.75rem;
-  padding: 0.25rem 0;
+  padding: var(--space-1) 0;
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: 0.6875rem;
   line-height: 0.875rem;
+  font-weight: 500;
   text-decoration: none;
   text-align: center;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+
+.primary-nav-icon {
+  box-sizing: content-box;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
 }
 
 .primary-nav-link[aria-current="page"] {
@@ -79,32 +144,87 @@
   font-weight: 700;
 }
 
-.primary-nav-label {
-  overflow-wrap: anywhere;
+.primary-nav-link[aria-current="page"] .primary-nav-icon {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
-/* prefers-reduced-transparency: no-preference gets a translucent bar with blur; otherwise solid. */
-@media (prefers-reduced-transparency: no-preference) {
-  .primary-nav {
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
+/* One line always: a wrapped label ("Transaction s") reads as a defect. A long label may
+   run a pixel or two into the gap either side; it stays centred on its tab. */
+.primary-nav-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 22.5rem) {
+  .primary-nav-link {
+    font-size: 0.625rem;
+  }
+}
+
+@media (hover: hover) {
+  .primary-nav-link:hover {
+    color: var(--text);
+  }
+
+  .primary-nav-link[aria-current="page"]:hover {
+    color: var(--accent);
+  }
+}
+
+/* Below 48rem the header is plain: drop the desktop glass that base.css shares with it. */
+@media (max-width: 47.999rem) {
+  .app-header {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
 @media (min-width: 48rem) {
+  .app-header {
+    position: fixed;
+    top: calc(var(--space-3) + env(safe-area-inset-top));
+    inset-inline: 0;
+    margin-inline: auto;
+    z-index: 5;
+    width: min(calc(100% - 2 * var(--gutter)), var(--content-wide));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border-radius: 999px;
+  }
+
+  /* Desktop: the nav and Sign Out sit together at the right of the pill. */
+  .app-header .primary-nav {
+    margin-inline-start: auto;
+  }
+
+  .app-header .sign-out-button {
+    margin-inline-start: 0;
+  }
+
+  .page {
+    padding-top: var(--space-5);
+  }
+
   .primary-nav {
-    top: 0;
-    right: auto;
-    width: var(--sidebar-width);
-    padding: 1.5rem 0.75rem;
-    border-top: 0;
-    border-right: 1px solid var(--separator);
+    position: static;
+    padding: var(--space-1);
+    background: var(--well);
+    border-radius: 999px;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .primary-nav-list {
-    flex-direction: column;
-    gap: 0.25rem;
+    justify-content: center;
+    gap: var(--space-1);
   }
 
   .primary-nav-list > li {
@@ -113,21 +233,79 @@
 
   .primary-nav-link {
     flex-direction: row;
-    justify-content: flex-start;
-    gap: 0.75rem;
+    gap: var(--space-2);
     min-height: 2.75rem;
-    padding: 0.5rem 0.75rem;
-    font-size: 1rem;
+    padding: var(--space-2) var(--space-3);
+    border-radius: 999px;
+    font-size: 0.9375rem;
     line-height: 1.25rem;
-    text-align: start;
+  }
+
+  .primary-nav-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    border: 0;
   }
 
   .primary-nav-link[aria-current="page"] {
-    background: var(--surface);
+    background: linear-gradient(to bottom, var(--accent-fill-top), var(--accent));
+    color: var(--on-accent);
+    box-shadow: 0 0 1rem var(--glow);
+  }
+
+  .primary-nav-link[aria-current="page"] .primary-nav-icon {
+    background: none;
   }
 
   .app-main {
-    margin-left: var(--sidebar-width);
-    padding: 2rem;
+    padding: calc(var(--nav-height) + var(--space-6) + env(safe-area-inset-top)) var(--gutter) var(--gutter);
+  }
+}
+
+@media (min-width: 48rem) and (hover: hover) {
+  .primary-nav-link:not([aria-current="page"]):hover {
+    background: var(--accent-soft);
+  }
+
+  .primary-nav-link[aria-current="page"]:hover {
+    color: var(--on-accent);
+  }
+}
+
+/* Tab bar: the active label is always the accent colour, whatever else is hovered or inherited. */
+@media (max-width: 47.999rem) {
+  .primary-nav-link[aria-current="page"],
+  .primary-nav-link[aria-current="page"]:hover,
+  .primary-nav-link[aria-current="page"] .primary-nav-label {
+    color: var(--accent);
+    font-weight: 700;
+    opacity: 1;
+  }
+}
+
+/* Room for five labelled links: keep the wordmark readable to assistive tech only. */
+@media (min-width: 48rem) and (max-width: 59.999rem) {
+  .app-header .brand-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 60rem) {
+  .primary-nav-link {
+    gap: var(--space-2);
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .primary-nav-link[aria-current="page"] {
+    outline: 2px solid var(--text);
+    outline-offset: -2px;
   }
 }
