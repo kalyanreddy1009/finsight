@@ -13,3 +13,7 @@ __pycache__/
 *.db-shm
 docs_store/
 .env
+
+# Coverage output
+.coverage
+coverage/

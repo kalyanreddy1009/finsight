@@ -14,17 +14,18 @@ The full specification is in [finsight_v2_0_technical_architecture_and_engineeri
 | Ledger engine | Built | Double-entry journal, `DRAFT` to `POSTED`, reversals, integer paise |
 | Auth | Built | Single owner, setup, login, refresh, logout, device list and revoke |
 | Accounts | Built | Asset and liability subtypes, optional opening balance |
-| Categories | Built | List and create (Plan tab) |
+| Categories | Built | Spending and income categories, list and create (Plan tab) |
 | Transactions | Built | Expense, income, transfer, refund; expense splits; settle split; reverse; edit notes, tax section and category |
 | Statement import | Built, CSV only | Upload, row review, commit once reconciled |
 | Dashboard | Built | Safe-to-spend summary |
-| Web client | Built | Home, Transactions, Accounts, Plan tabs |
+| Web client | Built | Home, Transactions, Accounts, Plan tabs. Plan holds budgets, recurring bills, goals, tax summary and categories |
 | Bank and card PDF parsers | Not built | PDF uploads are rejected (`NO_PARSER`); needs sample statements |
-| Budgets | Not built | |
-| Recurring bills and price-creep detection | Not built | |
-| Goals | Not built | |
+| Budgets | Built | Monthly total limit and per-category limits; spending is read from posted ledger entries |
+| Recurring bills | Built | Add, mark paid (advances the next due date only), pause or resume, delete. Editing is in the API only, not the web client |
+| Price-creep detection | Not built | No detection code exists |
+| Goals | Built | Target, amount set aside, monthly contribution, status (Active, Paused, Completed). Priority is accepted by the API only |
 | Investments, CAS import, XIRR screens | Not built | `backend/app/finance/xirr_engine.py` exists; no endpoint or screen uses it |
-| Tax summary | Not built | Tax section is stored per transaction; no summary endpoint |
+| Tax summary | Built | Totals per tax section for an Indian financial year (April to March). Shows old-regime limits as information only: 80C ₹1,50,000, 80D ₹25,000, 80CCD ₹50,000, 24B ₹2,00,000 |
 | AI assistant | Not built | Assistant tab is a placeholder; `backend/app/ai/privacy_filter.py` is not wired to any route |
 | Offline sync | Not built | `/sync/*` is deferred per CLAUDE.md |
 | Backend serving the web build | Not built | Only the Vite dev server is set up |
@@ -120,8 +121,9 @@ use the Vite URL in the browser. The browser never calls the backend port direct
    setup code from `FINSIGHT_SETUP_TOKEN`.
 4. On the Accounts tab, add an account and pick a subtype such as `BANK_SAVINGS` or `CREDIT_CARD`.
 5. On the Plan tab, add a category (expense or income).
-6. On the Transactions tab, add a transaction with quick add. Choose the account and category.
-7. On the Accounts tab, upload a `.csv` statement for an account with the CSV file type. Review the
+6. On the Plan tab, set a monthly budget, add a recurring bill, add a goal, and view the tax summary for the current financial year. Budget categories and bills use expense categories.
+7. On the Transactions tab, add a transaction with quick add. Choose the account and category.
+8. On the Accounts tab, upload a `.csv` statement for an account with the CSV file type. Review the
    rows, then commit. Commit is refused with 409 `STATEMENT_NOT_RECONCILED` until the statement
    reconciles to its closing balance, has no import errors, and has no rows pending review.
 
