@@ -4,6 +4,7 @@ import type { Category, TaxSection, Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
 import { SelectField } from "../../components/SelectField";
 import { categoryOptionsFor } from "../../lib/categoryOptions";
+import { useReportBusy } from "../../hooks/useReportBusy";
 import { TextareaField } from "./FormControls";
 import { describeError, hasErrorCode } from "./transactionErrors";
 import { TAX_SECTIONS, parseTaxSection, taxSectionLabel } from "./transactionLabels";
@@ -35,11 +36,12 @@ interface TransactionEditFormProps {
   transaction: Transaction;
   categories: readonly Category[];
   onSaved: (transaction: Transaction) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 const TAX_OPTIONS = TAX_SECTIONS.map((section) => ({ value: section, label: taxSectionLabel(section) }));
 
-export function TransactionEditForm({ transaction, categories, onSaved }: TransactionEditFormProps) {
+export function TransactionEditForm({ transaction, categories, onSaved, onBusyChange }: TransactionEditFormProps) {
   const [draft, setDraft] = useState<EditDraft>({
     categoryId: transaction.category_id ?? "",
     taxSection: transaction.tax_section,
@@ -49,6 +51,7 @@ export function TransactionEditForm({ transaction, categories, onSaved }: Transa
   const [conflict, setConflict] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useReportBusy(saving, onBusyChange);
 
   const patch = buildPatch(transaction, draft);
   const canSave = Object.keys(patch).length > 0 && !saving && !conflict;

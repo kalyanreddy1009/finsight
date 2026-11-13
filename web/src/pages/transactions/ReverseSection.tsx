@@ -2,19 +2,22 @@ import { useRef, useState } from "react";
 import { reverseTransaction } from "../../api/transactions";
 import type { Transaction } from "../../api/types";
 import { Button } from "../../components/Button";
+import { useReportBusy } from "../../hooks/useReportBusy";
 import { describeError } from "./transactionErrors";
 
 interface ReverseSectionProps {
   transaction: Transaction;
   onReversed: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 // Reversal is irreversible, so it sits behind a confirmation step. The trigger is not prominent.
-export function ReverseSection({ transaction, onReversed }: ReverseSectionProps) {
+export function ReverseSection({ transaction, onReversed, onBusyChange }: ReverseSectionProps) {
   const [confirming, setConfirming] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
+  useReportBusy(posting, onBusyChange);
 
   async function handlePost() {
     setPosting(true);

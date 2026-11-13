@@ -2,11 +2,25 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCategory, listCategories } from "../../api/categories";
+import { getBudget } from "../../api/budgets";
+import { listGoals } from "../../api/goals";
+import { listRecurring } from "../../api/recurring";
+import { getTaxSummary } from "../../api/tax";
 import type { Category } from "../../api/types";
 import { installDialogStub } from "../transactions/testDialog";
 import { PlanPage } from "./PlanPage";
 
 vi.mock("../../api/categories", () => ({ listCategories: vi.fn(), createCategory: vi.fn() }));
+vi.mock("../../api/budgets", () => ({ getBudget: vi.fn(), saveBudget: vi.fn(), deleteBudget: vi.fn() }));
+vi.mock("../../api/recurring", () => ({
+  listRecurring: vi.fn(),
+  createRecurring: vi.fn(),
+  updateRecurring: vi.fn(),
+  advanceRecurring: vi.fn(),
+  deleteRecurring: vi.fn(),
+}));
+vi.mock("../../api/goals", () => ({ listGoals: vi.fn(), createGoal: vi.fn(), updateGoal: vi.fn(), deleteGoal: vi.fn() }));
+vi.mock("../../api/tax", () => ({ getTaxSummary: vi.fn() }));
 
 function categoryFixture(overrides: Partial<Category> & Pick<Category, "id" | "name">): Category {
   return {
@@ -30,6 +44,10 @@ const categories: Category[] = [
 beforeEach(() => {
   installDialogStub();
   vi.resetAllMocks();
+  vi.mocked(getBudget).mockResolvedValue({ month: "2026-11", budget: null });
+  vi.mocked(listRecurring).mockResolvedValue([]);
+  vi.mocked(listGoals).mockResolvedValue([]);
+  vi.mocked(getTaxSummary).mockResolvedValue({ fy: 2026, start_date: "2026-04-01", end_date: "2027-03-31", sections: [], total_minor: 0 });
 });
 
 function groupOf(heading: string): HTMLElement {
@@ -49,7 +67,16 @@ describe("PlanPage categories", () => {
     expect(within(spending).getByText("Tax 80C · Essential · Private")).toBeTruthy();
     expect(within(spending).getByText("Built in")).toBeTruthy();
     expect(within(groupOf("Income")).getByText("Salary")).toBeTruthy();
-    expect(screen.getByText("Budgets, recurring bills and goals are not available yet.")).toBeTruthy();
+  });
+
+  it("shows Budget, Bills, Goals, Tax and Categories in that order", async () => {
+    vi.mocked(listCategories).mockResolvedValue(categories);
+    const { container } = render(<PlanPage />);
+    await screen.findByText("Groceries");
+    await screen.findByText("No tax-tagged transactions in this year. Set a tax section on a transaction to see it here.");
+
+    const headings = Array.from(container.querySelectorAll(".plan-section-title")).map((node) => node.textContent);
+    expect(headings).toEqual(["Budget", "Bills", "Goals", "Tax", "Categories"]);
   });
 
   it("submits is_discretionary false when Essential spending is checked", async () => {

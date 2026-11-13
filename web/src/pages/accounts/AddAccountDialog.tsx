@@ -6,6 +6,7 @@ import { AccountFormFields } from "./AccountFormFields";
 import { Dialog } from "../../components/Dialog";
 import { EMPTY_ACCOUNT_FORM, validateAccountForm, type AccountFormErrors, type AccountFormValues, type AccountTextField } from "./accountForm";
 import { messageFor } from "./format";
+import { useReportBusy } from "../../hooks/useReportBusy";
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -14,9 +15,10 @@ interface AddAccountDialogProps {
 }
 
 export function AddAccountDialog({ open, onClose, onCreated }: AddAccountDialogProps) {
+  const [busy, setBusy] = useState(false);
   return (
-    <Dialog open={open} title="Add Account" onClose={onClose}>
-      {open ? <AddAccountForm onCancel={onClose} onCreated={onCreated} /> : null}
+    <Dialog open={open} title="Add Account" onClose={onClose} busy={busy}>
+      {open ? <AddAccountForm onCancel={onClose} onCreated={onCreated} onBusyChange={setBusy} /> : null}
     </Dialog>
   );
 }
@@ -24,14 +26,16 @@ export function AddAccountDialog({ open, onClose, onCreated }: AddAccountDialogP
 interface AddAccountFormProps {
   onCancel: () => void;
   onCreated: () => void;
+  onBusyChange: (busy: boolean) => void;
 }
 
 // Mounted only while the dialog is open, so every opening starts from an empty form.
-function AddAccountForm({ onCancel, onCreated }: AddAccountFormProps) {
+function AddAccountForm({ onCancel, onCreated, onBusyChange }: AddAccountFormProps) {
   const [values, setValues] = useState<AccountFormValues>(EMPTY_ACCOUNT_FORM);
   const [errors, setErrors] = useState<AccountFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  useReportBusy(saving, onBusyChange);
 
   function setText(key: AccountTextField, value: string) {
     setValues((previous) => ({ ...previous, [key]: value }));

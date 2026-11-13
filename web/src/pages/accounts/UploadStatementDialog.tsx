@@ -5,6 +5,7 @@ import type { Account } from "../../api/types";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { SelectField } from "../../components/SelectField";
+import { useReportBusy } from "../../hooks/useReportBusy";
 import { uploadFailure, type UploadFailure } from "./uploadErrors";
 
 const CSV_KIND: StatementKind = "CSV";
@@ -18,9 +19,12 @@ interface UploadStatementDialogProps {
 }
 
 export function UploadStatementDialog({ open, accounts, onClose, onUploaded }: UploadStatementDialogProps) {
+  const [busy, setBusy] = useState(false);
   return (
-    <Dialog open={open} title="Upload Statement" onClose={onClose}>
-      {open ? <UploadForm accounts={accounts} onCancel={onClose} onUploaded={onUploaded} /> : null}
+    <Dialog open={open} title="Upload Statement" onClose={onClose} busy={busy}>
+      {open ? (
+        <UploadForm accounts={accounts} onCancel={onClose} onUploaded={onUploaded} onBusyChange={setBusy} />
+      ) : null}
     </Dialog>
   );
 }
@@ -29,6 +33,7 @@ interface UploadFormProps {
   accounts: readonly Account[];
   onCancel: () => void;
   onUploaded: (statementId: string) => void;
+  onBusyChange: (busy: boolean) => void;
 }
 
 interface UploadErrors {
@@ -36,12 +41,13 @@ interface UploadErrors {
   file?: string;
 }
 
-function UploadForm({ accounts, onCancel, onUploaded }: UploadFormProps) {
+function UploadForm({ accounts, onCancel, onUploaded, onBusyChange }: UploadFormProps) {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<UploadErrors>({});
   const [uploading, setUploading] = useState(false);
   const [failure, setFailure] = useState<UploadFailure | null>(null);
+  useReportBusy(uploading, onBusyChange);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

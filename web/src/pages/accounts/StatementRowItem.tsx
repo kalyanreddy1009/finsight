@@ -36,10 +36,11 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
       <span className="row-amount">{`${directionLabel} ${formatMinor(row.amount_minor)}`}</span>
       <div className="stmt-meta">
         <span className="status-text">{ROW_STATUS_LABELS[row.row_status]}</span>
+        {/* A suggested id missing from the loaded categories shows the placeholder, not a wrong option. */}
         <SelectField
           id={`row-category-${row.id}`}
           label="Category"
-          value={row.suggested_category_id ?? ""}
+          value={currentCategory?.id ?? ""}
           disabled={readOnly || committed}
           onChange={(event) => {
             const categoryId = event.target.value;
@@ -48,9 +49,7 @@ export function StatementRowItem({ row, categories, readOnly, actions }: Stateme
             }
           }}
         >
-          <option value="" disabled>
-            Choose a category
-          </option>
+          <option value="">Choose a category</option>
           {selectableCategories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}

@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { Field } from "../../components/Field";
 import { parseRupeesToMinor } from "../../lib/money";
 import { SelectField } from "../../components/SelectField";
+import { useReportBusy } from "../../hooks/useReportBusy";
 import { KindSwitch } from "./KindSwitch";
 import { SplitSection } from "./SplitSection";
 import { describeError } from "./transactionErrors";
@@ -23,15 +24,17 @@ interface AddTransactionFormProps {
   categories: readonly Category[];
   onCancel: () => void;
   onAdded: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
-export function AddTransactionForm({ accounts, categories, onCancel, onAdded }: AddTransactionFormProps) {
+export function AddTransactionForm({ accounts, categories, onCancel, onAdded, onBusyChange }: AddTransactionFormProps) {
   const [draft, setDraft] = useState<EntryDraft>(() => emptyDraft(toIsoDate(new Date())));
   const [errors, setErrors] = useState<EntryErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // One key per attempt-until-success, so a retry after a lost response cannot duplicate the entry.
   const idempotencyKey = useRef(crypto.randomUUID());
+  useReportBusy(submitting, onBusyChange);
 
   const accountOptions = accounts
     .filter((account) => account.is_active)

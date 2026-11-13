@@ -8,6 +8,7 @@ import { Dialog } from "../../components/Dialog";
 import { SelectField } from "../../components/SelectField";
 import { messageFor, minorToRupeesText, todayIso } from "./format";
 import { validateRepayment, type RepaymentErrors, type RepaymentValues } from "./repaymentForm";
+import { useReportBusy } from "../../hooks/useReportBusy";
 
 interface RepaymentDialogProps {
   split: Split | null;
@@ -17,10 +18,17 @@ interface RepaymentDialogProps {
 }
 
 export function RepaymentDialog({ split, bankAccounts, onClose, onSettled }: RepaymentDialogProps) {
+  const [busy, setBusy] = useState(false);
   return (
-    <Dialog open={split !== null} title="Record Repayment" onClose={onClose}>
+    <Dialog open={split !== null} title="Record Repayment" onClose={onClose} busy={busy}>
       {split !== null ? (
-        <RepaymentForm split={split} bankAccounts={bankAccounts} onCancel={onClose} onSettled={onSettled} />
+        <RepaymentForm
+          split={split}
+          bankAccounts={bankAccounts}
+          onCancel={onClose}
+          onSettled={onSettled}
+          onBusyChange={setBusy}
+        />
       ) : null}
     </Dialog>
   );
@@ -31,9 +39,10 @@ interface RepaymentFormProps {
   bankAccounts: readonly Account[];
   onCancel: () => void;
   onSettled: () => void;
+  onBusyChange: (busy: boolean) => void;
 }
 
-function RepaymentForm({ split, bankAccounts, onCancel, onSettled }: RepaymentFormProps) {
+function RepaymentForm({ split, bankAccounts, onCancel, onSettled, onBusyChange }: RepaymentFormProps) {
   const [values, setValues] = useState<RepaymentValues>({
     amountText: minorToRupeesText(split.outstanding_minor),
     bankAccountId: bankAccounts[0]?.id ?? "",
@@ -43,6 +52,7 @@ function RepaymentForm({ split, bankAccounts, onCancel, onSettled }: RepaymentFo
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
+  useReportBusy(saving, onBusyChange);
   const noBankAccount = bankAccounts.length === 0;
 
   function setField<K extends keyof RepaymentValues>(key: K, value: RepaymentValues[K]) {

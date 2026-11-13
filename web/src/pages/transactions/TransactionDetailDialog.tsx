@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Category, Transaction } from "../../api/types";
 import { formatMinor } from "../../lib/money";
 import { ReverseSection } from "./ReverseSection";
@@ -22,8 +23,11 @@ export function TransactionDetailDialog({
   onSaved,
   onReversed,
 }: TransactionDetailDialogProps) {
+  // Saving and reversing are tracked separately: either one in flight keeps the dialog open.
+  const [editing, setEditing] = useState(false);
+  const [reversing, setReversing] = useState(false);
   return (
-    <Dialog open={transaction !== null} title="Transaction" onClose={onClose}>
+    <Dialog open={transaction !== null} title="Transaction" onClose={onClose} busy={editing || reversing}>
       {transaction !== null ? (
         <TransactionDetailBody
           key={`${transaction.id}:${transaction.version}`}
@@ -31,6 +35,8 @@ export function TransactionDetailDialog({
           categories={categories}
           onSaved={onSaved}
           onReversed={onReversed}
+          onEditBusyChange={setEditing}
+          onReverseBusyChange={setReversing}
         />
       ) : null}
     </Dialog>
@@ -42,9 +48,18 @@ interface TransactionDetailBodyProps {
   categories: readonly Category[];
   onSaved: (transaction: Transaction) => void;
   onReversed: () => void;
+  onEditBusyChange: (busy: boolean) => void;
+  onReverseBusyChange: (busy: boolean) => void;
 }
 
-function TransactionDetailBody({ transaction, categories, onSaved, onReversed }: TransactionDetailBodyProps) {
+function TransactionDetailBody({
+  transaction,
+  categories,
+  onSaved,
+  onReversed,
+  onEditBusyChange,
+  onReverseBusyChange,
+}: TransactionDetailBodyProps) {
   if (transaction.review_status === "SUPERSEDED") {
     return (
       <div className="tx-dialog-body">
@@ -56,8 +71,13 @@ function TransactionDetailBody({ transaction, categories, onSaved, onReversed }:
   return (
     <div className="tx-dialog-body">
       <TransactionFacts transaction={transaction} />
-      <TransactionEditForm transaction={transaction} categories={categories} onSaved={onSaved} />
-      <ReverseSection transaction={transaction} onReversed={onReversed} />
+      <TransactionEditForm
+        transaction={transaction}
+        categories={categories}
+        onSaved={onSaved}
+        onBusyChange={onEditBusyChange}
+      />
+      <ReverseSection transaction={transaction} onReversed={onReversed} onBusyChange={onReverseBusyChange} />
     </div>
   );
 }

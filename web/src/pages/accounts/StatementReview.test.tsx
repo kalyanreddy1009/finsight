@@ -326,5 +326,19 @@ describe("statement review categories and committed rows", () => {
     expect(await screen.findByText("Committed", { selector: ".status-text" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
   });
+
+  it("shows the Choose a category placeholder when the suggested category is not loaded", async () => {
+    vi.mocked(getStatementReview).mockResolvedValue(
+      reviewFixture(statementFixture(), [rowFixture({ id: "r5", suggested_category_id: "cat-missing" })]),
+    );
+    renderReview();
+
+    const select = (await screen.findByLabelText("Category")) as HTMLSelectElement;
+
+    expect(select.value).toBe("");
+    expect(select.selectedOptions[0]?.textContent).toBe("Choose a category");
+    expect(select.selectedOptions[0]?.disabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+  });
 });
 

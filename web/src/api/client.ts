@@ -11,7 +11,7 @@ const CSRF_HEADERS = { "X-Requested-With": "finsight" } as const;
 const NETWORK_MESSAGE = "FinSight cannot be reached. Check your connection and try again.";
 const GENERIC_MESSAGE = "Something went wrong. Try again.";
 
-export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface RequestOptions {
   body?: unknown;

@@ -3,6 +3,7 @@ import { ApiError } from "../../api/client";
 const MONTHS: readonly string[] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const GENERIC_MESSAGE = "Something went wrong. Try again.";
+const PAISE_PER_RUPEE = 100n;
 
 export function isIsoDate(value: string): boolean {
   return ISO_DATE.test(value);
@@ -32,11 +33,17 @@ export function todayIso(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-// Paise to a rupee string for an input, e.g. 1200050 -> "12000.50". Uses integer math only.
+// Paise to a rupee string for an input, e.g. 1200050 -> "12000.50", -150 -> "-1.50".
+// Works on the absolute value with BigInt, then re-applies the sign. No floats.
 export function minorToRupeesText(minor: number): string {
-  const rupees = Math.trunc(minor / 100);
-  const paise = minor % 100;
-  return `${rupees}.${String(paise).padStart(2, "0")}`;
+  if (!Number.isSafeInteger(minor)) {
+    throw new RangeError("minorToRupeesText expects a safe integer amount in paise");
+  }
+  const magnitude = BigInt(Math.abs(minor));
+  const sign = minor < 0 ? "-" : "";
+  const rupees = magnitude / PAISE_PER_RUPEE;
+  const paise = (magnitude % PAISE_PER_RUPEE).toString().padStart(2, "0");
+  return `${sign}${rupees}.${paise}`;
 }
 
 export function messageFor(error: unknown): string {

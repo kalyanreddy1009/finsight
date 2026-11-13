@@ -5,6 +5,7 @@ const MAX_WHOLE_RUPEE_DIGITS = 14;
 const RUPEE_SIGN = "₹";
 const MINUS_SIGN = "−";
 const PAISE_PER_RUPEE = 100n;
+const MAX_RUPEES_BIG = BigInt(MAX_RUPEES);
 
 // Optional leading ₹ and spaces, Western or Indian comma grouping, at most 2 decimals. No sign.
 const RUPEE_INPUT = /^₹?\s*(\d+|\d{1,3}(?:,\d{2,3})+)(?:\.(\d{1,2}))?$/;
@@ -18,16 +19,17 @@ export function parseRupeesToMinor(input: string): number | null {
   if (match === null) {
     return null;
   }
-  const wholeText = (match[1] ?? "").replaceAll(",", "").replace(/^0+(?=\d)/, "");
-  if (wholeText.length > MAX_WHOLE_RUPEE_DIGITS) {
+  const wholeDigits = (match[1] ?? "").replaceAll(",", "").replace(/^0+(?=\d)/, "");
+  if (wholeDigits.length > MAX_WHOLE_RUPEE_DIGITS) {
     return null;
   }
-  const rupees = Number(wholeText);
-  if (rupees > MAX_RUPEES) {
+  const rupees = BigInt(wholeDigits);
+  if (rupees > MAX_RUPEES_BIG) {
     return null;
   }
-  const paise = Number((match[2] ?? "").padEnd(2, "0"));
-  return rupees * 100 + paise;
+  const paise = BigInt((match[2] ?? "").padEnd(2, "0"));
+  // The largest accepted value is about 10^15 paise, which is below Number.MAX_SAFE_INTEGER.
+  return Number(rupees * PAISE_PER_RUPEE + paise);
 }
 
 function groupIndian(digits: string): string {
